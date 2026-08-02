@@ -1,0 +1,26 @@
+name: Stage2
+on:
+  push:
+    branches: [corgi]
+
+permissions:
+  contents: read
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - name: Who am I
+        run: aws sts get-caller-identity
+
+      - name: Look at the two buckets directly
+        run: |
+          for b in userad88e2b168aa387e logad88e2b168aa387e; do
+            echo "===== $b ====="
+            aws s3 ls "s3://$b/" --recursive 2>&1 | head -50
+          done
