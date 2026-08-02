@@ -48,16 +48,9 @@ jobs:
           aws iam list-role-policies --role-name cicdRole 2>/dev/null || echo "denied"
           echo "---- roles in account ----"
           aws iam list-roles --query 'Roles[].[RoleName,Arn]' --output text 2>/dev/null || echo "denied"
-      - name: Fetch site over HTTP
+
+      - name: Find CloudFront domain
         run: |
-          B=site781fe43f26b9eba3
-          for host in \
-            "$B.s3-website-us-east-1.amazonaws.com" \
-            "$B.s3.amazonaws.com" \
-            "$B.s3.us-east-1.amazonaws.com"; do
-            echo "########## $host ##########"
-            echo "---- index.html ----"
-            curl -s -m 10 "http://$host/index.html"
-            echo
-            echo "---- js/scripts.js ----"
-            curl -s
+          aws cloudfront list-distributions \
+            --query 'DistributionList.Items[].{Domain:DomainName,Aliases:Aliases.Items,Origins:Origins.Items[].DomainName}' \
+            --output json 2>&1 | head -60
