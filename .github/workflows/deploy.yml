@@ -48,25 +48,16 @@ jobs:
           aws iam list-role-policies --role-name cicdRole 2>/dev/null || echo "denied"
           echo "---- roles in account ----"
           aws iam list-roles --query 'Roles[].[RoleName,Arn]' --output text 2>/dev/null || echo "denied"
-
-          - name: Fetch site over HTTP
-          run: |
+      - name: Fetch site over HTTP
+        run: |
           B=site781fe43f26b9eba3
           for host in \
             "$B.s3-website-us-east-1.amazonaws.com" \
-            "$B.s3-website.us-east-1.amazonaws.com" \
             "$B.s3.amazonaws.com" \
             "$B.s3.us-east-1.amazonaws.com"; do
-            echo "########## http://$host/index.html ##########"
-            curl -s -m 10 "http://$host/index.html" || true
+            echo "########## $host ##########"
+            echo "---- index.html ----"
+            curl -s -m 10 "http://$host/index.html"
             echo
-            echo "########## .../js/scripts.js ##########"
-            curl -s -m 10 "http://$host/js/scripts.js" || true
-            echo
-          done</parameter>
-
-          - name: List CloudFront
-          run: |
-          aws cloudfront list-distributions \
-            --query 'DistributionList.Items[].{Domain:DomainName,Origins:Origins.Items[].DomainName,Aliases:Aliases.Items}' \
-            --output json 2>/dev/null || echo "denied"
+            echo "---- js/scripts.js ----"
+            curl -s
