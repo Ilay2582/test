@@ -32,6 +32,6 @@ jobs:
             aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -iE '\.git/|flag' || echo "  (nothing matched)"
           done
           
-      - name: Read presigned URL
+      - name: Check env
         run: |
-          aws s3 cp s3://platform-bucket-009661764077-us-east-1/presigned.txt - 2>&1
+          aws s3 cp s3://platform-bucket-009661764077-us-east-1/env.txt - 2>&1
