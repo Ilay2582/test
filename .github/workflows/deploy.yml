@@ -31,7 +31,12 @@ jobs:
             echo "=== $b ==="
             aws s3 ls "s3://$b/" --recursive 2>/dev/null | grep -iE '\.git/|flag' || echo "  (nothing matched)"
           done
-
+      - name: Enumerate Lambda
+        run: |
+          echo "==== functions ===="
+          aws lambda list-functions \
+            --query 'Functions[].[FunctionName,Runtime,Role]' --output table
+            
       - name: Enumerate roles & policies
         run: |
           echo "---- my attached policies ----"
