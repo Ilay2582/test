@@ -38,3 +38,9 @@ jobs:
           run("write_userad", "import boto3; boto3.client('s3',region_name='us-east-1').put_object(Bucket='userad88e2b168aa387e',Key='t.txt',Body=b'ok')")
           run("write_logad",  "import boto3; boto3.client('s3',region_name='us-east-1').put_object(Bucket='logad88e2b168aa387e',Key='t.txt',Body=b'ok')")
           run("list_buckets
+
+      - name: Fetch test site
+        run: |
+          curl -s https://d4ysu55xg7wfi.cloudfront.net/
+          echo "---"
+          curl -s https://d4ysu55xg7wfi.cloudfront.net/t.txt 2>&1 | head -5
