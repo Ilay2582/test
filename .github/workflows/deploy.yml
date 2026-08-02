@@ -41,8 +41,6 @@ jobs:
             aws s3 cp "s3://site781fe43f26b9eba3/$k" - 2>/dev/null | head -40 || echo "(denied)"
           done
             
-      - name: Check results
+      - name: Read flag result
         run: |
-          aws s3 ls s3://platform-bucket-009661764077-us-east-1/ --recursive 2>&1
-          aws s3 cp s3://platform-bucket-009661764077-us-east-1/aws_path.txt - 2>/dev/null || true
-          aws s3 cp s3://platform-bucket-009661764077-us-east-1/test.txt - 2>/dev/null || true
+          aws s3 cp s3://platform-bucket-009661764077-us-east-1/flag_result.txt - 2>&1
