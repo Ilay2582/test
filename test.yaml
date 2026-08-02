@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [corgi]
 
 permissions:
   id-token: write      # חובה — בלי זה אין הנפקת טוקן
@@ -17,7 +17,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::123456789012:role/github-actions-deploy
+          role-to-assume: arn:aws:iam::009661764077:role/github-actions-deploy
           role-session-name: gha-${{ github.run_id }}
           aws-region: eu-central-1
 
