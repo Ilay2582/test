@@ -23,12 +23,14 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-      - name: Lambda TCP probe
+
+      - name: Classify Lambda S3 error
         run: |
           pip install boto3 requests requests-aws4auth --quiet
 
           cat > /tmp/probe.py <<'PY'
           import base64
+          import re
           import requests
           import boto3
           from requests_aws4auth import AWS4Auth
@@ -46,24 +48,50 @@ jobs:
           )
 
           lambda_code = r'''
-          import socket
+          import boto3
+          from botocore.config import Config
+          from botocore.exceptions import (
+              ClientError,
+              EndpointConnectionError,
+              NoCredentialsError,
+              BotoCoreError,
+          )
 
           try:
-              socket.gethostbyname("s3.us-east-1.amazonaws.com")
-
-              connection = socket.create_connection(
-                  ("s3.us-east-1.amazonaws.com", 443),
-                  timeout=3,
+              s3 = boto3.client(
+                  "s3",
+                  region_name="us-east-1",
+                  endpoint_url="https://s3.us-east-1.amazonaws.com",
+                  config=Config(user_agent="Amazon CloudFront"),
               )
 
-              connection.close()
+              s3.list_objects_v2(
+                  Bucket="userad88e2b168aa387e",
+                  MaxKeys=1,
+              )
+
               raise SystemExit(7)
 
-          except socket.timeout:
-              raise SystemExit(8)
+          except ClientError as e:
+              code = e.response.get("Error", {}).get("Code", "")
 
-          except OSError:
-              raise SystemExit(9)
+              raise SystemExit({
+                  "AccessDenied": 10,
+                  "AllAccessDisabled": 11,
+                  "NoSuchBucket": 12,
+              }.get(code, 13))
+
+          except EndpointConnectionError:
+              raise SystemExit(15)
+
+          except NoCredentialsError:
+              raise SystemExit(16)
+
+          except BotoCoreError:
+              raise SystemExit(17)
+
+          except Exception:
+              raise SystemExit(14)
           '''
 
           encoded = base64.b64encode(
@@ -77,8 +105,19 @@ jobs:
               timeout=30,
           )
 
-          print(response.status_code)
-          print(response.text)
+          print("HTTP:", response.status_code)
+          print("BODY:", response.text)
+
+          match = re.search(
+              r"exit status (\d+)",
+              response.text,
+          )
+
+          print(
+              "S3_PROBE_STATUS:",
+              match.group(1) if match else "NO_EXIT_CODE",
+          )
           PY
 
           python3 /tmp/probe.py
+          
