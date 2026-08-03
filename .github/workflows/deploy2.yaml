@@ -65,9 +65,10 @@ jobs:
                   config=Config(user_agent="Amazon CloudFront"),
               )
 
-              s3.list_objects_v2(
-                  Bucket="userad88e2b168aa387e",
-                  MaxKeys=1,
+            s3.put_object(
+                  Bucket="logad88e2b168aa387e",
+                  Key="probe-" + str(int(time.time())) + ".txt",
+                  Body=b"probe",
               )
 
               raise SystemExit(7)
