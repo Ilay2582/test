@@ -23,17 +23,48 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-      - name: Probe S3 from Lambda
+      - name: Lambda network probe
         run: |
-              import socket
-              
-              for host in [
-                  "s3.us-east-1.amazonaws.com",
-                  "s3.amazonaws.com",
-              ]:
-                  try:
-                      ip = socket.gethostbyname(host)
-                      socket.create_connection((host, 443), timeout=2).close()
-                      raise SystemExit(7)
-                  except Exception:
-                      raise SystemExit(9)
+          pip install boto3 requests requests-aws4auth --quiet
+      
+          cat > /tmp/probe.py <<'PY'
+          import base64
+          import requests
+          import boto3
+          from requests_aws4auth import AWS4Auth
+      
+          API = "https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec"
+      
+          creds = boto3.Session().get_credentials().get_frozen_credentials()
+      
+          auth = AWS4Auth(
+              creds.access_key,
+              creds.secret_key,
+              "us-east-1",
+              "execute-api",
+              session_token=creds.token,
+          )
+      
+          lambda_code = r'''
+          import socket
+      
+          try:
+              socket.gethostbyname("s3.us-east-1.amazonaws.com")
+              raise SystemExit(7)
+          except Exception:
+              raise SystemExit(9)
+          '''
+      
+          encoded = base64.b64encode(lambda_code.encode()).decode()
+      
+          response = requests.post(
+              API,
+              json={"code": encoded},
+              auth=auth,
+          )
+      
+          print(response.status_code)
+          print(response.text)
+          PY
+      
+          python3 /tmp/probe.py
