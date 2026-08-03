@@ -23,8 +23,7 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-
-      - name: Classify Lambda S3 error
+      - name: Test Lambda S3 write
         run: |
           pip install boto3 requests requests-aws4auth --quiet
 
@@ -49,13 +48,9 @@ jobs:
 
           lambda_code = r'''
           import boto3
+          import time
           from botocore.config import Config
-          from botocore.exceptions import (
-              ClientError,
-              EndpointConnectionError,
-              NoCredentialsError,
-              BotoCoreError,
-          )
+          from botocore.exceptions import ClientError
 
           try:
               s3 = boto3.client(
@@ -65,7 +60,7 @@ jobs:
                   config=Config(user_agent="Amazon CloudFront"),
               )
 
-            s3.put_object(
+              s3.put_object(
                   Bucket="logad88e2b168aa387e",
                   Key="probe-" + str(int(time.time())) + ".txt",
                   Body=b"probe",
@@ -73,23 +68,8 @@ jobs:
 
               raise SystemExit(7)
 
-          except ClientError as e:
-              code = e.response.get("Error", {}).get("Code", "")
-
-              raise SystemExit({
-                  "AccessDenied": 10,
-                  "AllAccessDisabled": 11,
-                  "NoSuchBucket": 12,
-              }.get(code, 13))
-
-          except EndpointConnectionError:
-              raise SystemExit(15)
-
-          except NoCredentialsError:
-              raise SystemExit(16)
-
-          except BotoCoreError:
-              raise SystemExit(17)
+          except ClientError:
+              raise SystemExit(10)
 
           except Exception:
               raise SystemExit(14)
@@ -115,10 +95,9 @@ jobs:
           )
 
           print(
-              "S3_PROBE_STATUS:",
+              "S3_WRITE_STATUS:",
               match.group(1) if match else "NO_EXIT_CODE",
           )
           PY
 
           python3 /tmp/probe.py
-          
