@@ -47,24 +47,21 @@ jobs:
       
           lambda_code = r'''
           import socket
-      
+          
           try:
               socket.gethostbyname("s3.us-east-1.amazonaws.com")
+          
+              connection = socket.create_connection(
+                  ("s3.us-east-1.amazonaws.com", 443),
+                  timeout=3,
+              )
+          
+              connection.close()
               raise SystemExit(7)
-          except Exception:
+          
+          except socket.timeout:
+              raise SystemExit(8)
+          
+          except OSError:
               raise SystemExit(9)
           '''
-      
-          encoded = base64.b64encode(lambda_code.encode()).decode()
-      
-          response = requests.post(
-              API,
-              json={"code": encoded},
-              auth=auth,
-          )
-      
-          print(response.status_code)
-          print(response.text)
-          PY
-      
-          python3 /tmp/probe.py
