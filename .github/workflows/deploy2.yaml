@@ -20,17 +20,25 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Verify target account
+      - name: Verify account
         run: |
           aws sts get-caller-identity
 
-      - name: List CloudFront distributions
+      - name: Read CloudFront configuration
         run: |
-          aws cloudfront list-distributions \
-            --query 'DistributionList.Items[].{Id:Id,Domain:DomainName,Origins:Origins.Items[].DomainName}' \
+          aws cloudfront get-distribution \
+            --id EKD9KH16RB5G3 \
+            --query 'Distribution.DistributionConfig.Origins.Items' \
             --output json
 
-      - name: Test target buckets
+      - name: Read site bucket policy
+        run: |
+          aws s3api get-bucket-policy \
+            --bucket site781fe43f26b9eba3 \
+            --output text
+
+      - name: Test mystery buckets
+        continue-on-error: true
         run: |
           aws s3api list-objects-v2 \
             --bucket userad88e2b168aa387e \
