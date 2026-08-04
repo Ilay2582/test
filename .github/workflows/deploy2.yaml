@@ -23,16 +23,22 @@ jobs:
         
       - name: Enumerate with ctf_participant_role
         run: |
-          echo "=== bucket policy (real values) ==="
-          aws s3api get-bucket-policy --bucket userad88e2b168aa387e 2>&1
+          echo "=== bucket policy ==="
+          aws s3api get-bucket-policy --bucket userad88e2b168aa387e 2>&1 || true
 
-          echo "=== bucket logging (where logs go) ==="
-          aws s3api get-bucket-logging --bucket userad88e2b168aa387e 2>&1
+          echo "=== bucket logging ==="
+          aws s3api get-bucket-logging --bucket userad88e2b168aa387e 2>&1 || true
 
           echo "=== cloudfront distributions ==="
           aws cloudfront list-distributions \
             --query 'DistributionList.Items[].{Domain:DomainName,Origins:Origins.Items[].{Domain:DomainName,Headers:CustomHeaders.Items}}' \
-            --output json 2>&1
+            --output json 2>&1 || true
 
-          echo "=== all buckets visible ==="
-          aws s3api list-buckets 2>&1
+          echo "=== list buckets ==="
+          aws s3api list-buckets 2>&1 || true
+
+          echo "=== logad bucket logging ==="
+          aws s3api get-bucket-logging --bucket logad88e2b168aa387e 2>&1 || true
+
+          echo "=== userad bucket acl ==="
+          aws s3api get-bucket-acl --bucket userad88e2b168aa387e 2>&1 || true
