@@ -24,28 +24,25 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-      - name: Read CloudFront configuration
-        run: |
-          aws cloudfront get-distribution \
-            --id EKD9KH16RB5G3 \
-            --query 'Distribution.DistributionConfig.Origins.Items' \
-            --output json
-
-      - name: Read site bucket policy
-        run: |
-          aws s3api get-bucket-policy \
-            --bucket site781fe43f26b9eba3 \
-            --output text
-
-      - name: Test mystery buckets
+      - name: Read user bucket policy
         continue-on-error: true
         run: |
-          aws s3api list-objects-v2 \
+          aws s3api get-bucket-policy \
             --bucket userad88e2b168aa387e \
-            --max-items 5 \
-            --output json
+            --output text
 
-          aws s3api list-objects-v2 \
+      - name: Read log bucket policy
+        continue-on-error: true
+        run: |
+          aws s3api get-bucket-policy \
             --bucket logad88e2b168aa387e \
-            --max-items 5 \
-            --output json
+            --output text
+
+      - name: Read bucket locations
+        continue-on-error: true
+        run: |
+          aws s3api get-bucket-location \
+            --bucket userad88e2b168aa387e
+
+          aws s3api get-bucket-location \
+            --bucket logad88e2b168aa387e
