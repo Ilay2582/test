@@ -26,6 +26,7 @@ jobs:
           cat > /tmp/map_files.py <<'PY'
           import base64
           import re
+          import textwrap
           import requests
           import boto3
           from requests_aws4auth import AWS4Auth
@@ -77,6 +78,7 @@ jobs:
           raise SystemExit(ord(target[index]))
           """
 
+          lambda_template = textwrap.dedent(lambda_template)
           output = []
 
           for index in range(256):
