@@ -1,4 +1,4 @@
-name: Stage2-01-Runtime-Fingerprint
+name: Stage2-02-Inspect-Deployed-Files
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  fingerprint:
+  inspect:
     runs-on: ubuntu-latest
 
     env:
@@ -23,15 +23,13 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Fingerprint Lambda runtime
+      - name: Inspect deployed files
         run: |
           python3 - <<'PY'
           import os
           import base64
           import requests
           from requests_aws4auth import AWS4Auth
-
-          api = os.environ["API_URL"]
 
           auth = AWS4Auth(
               os.environ["AWS_ACCESS_KEY_ID"],
@@ -42,52 +40,49 @@ jobs:
           )
 
           tests = {
-              "opt_aws": r'''
+              "var_task_exists": r'''
           import os
-          raise SystemExit(7 if os.path.exists("/opt/aws") else 9)
+          raise SystemExit(7 if os.path.isdir("/var/task") else 9)
           ''',
 
-              "opt_nslookup": r'''
+              "lambda_file_exists": r'''
           import os
-          raise SystemExit(7 if os.path.exists("/opt/nslookup") else 9)
-          ''',
-
-              "bin_sh": r'''
-          import os
-          raise SystemExit(7 if os.path.exists("/bin/sh") else 9)
-          ''',
-
-              "curl": r'''
-          import shutil
-          raise SystemExit(7 if shutil.which("curl") else 9)
-          ''',
-
-              "wget": r'''
-          import shutil
-          raise SystemExit(7 if shutil.which("wget") else 9)
+          raise SystemExit(7 if os.path.isfile("/var/task/lambda_function.py") else 9)
           ''',
 
               "lambda_source_markers": r'''
           import os
 
-          path = "/var/task/lambda_function.py"
+          try:
+              path = "/var/task/lambda_function.py"
 
-          if not os.path.exists(path):
-              raise SystemExit(9)
+              if not os.path.isfile(path):
+                  raise SystemExit(9)
 
-          source = open(path, "r", errors="ignore").read()
+              with open(path, "rb") as handle:
+                  data = handle.read(65536).lower()
 
-          markers = [
-              "subprocess",
-              "shell=True",
-              "nslookup",
-              "lambda_handler",
-              "domain = event.get"
-          ]
+              markers = [
+                  b"subprocess",
+                  b"shell=true",
+                  b"nslookup",
+                  b"lambda_handler",
+                  b"domain = event.get"
+              ]
 
-          matches = sum(marker in source for marker in markers)
+              matches = sum(marker in data for marker in markers)
+              raise SystemExit(20 + matches)
 
-          raise SystemExit(20 + matches)
+          except SystemExit:
+              raise
+
+          except Exception:
+              raise SystemExit(19)
+          ''',
+
+              "opt_directory": r'''
+          import os
+          raise SystemExit(7 if os.path.isdir("/opt") else 9)
           '''
           }
 
@@ -95,7 +90,7 @@ jobs:
               encoded = base64.b64encode(code.encode()).decode()
 
               response = requests.post(
-                  api,
+                  os.environ["API_URL"],
                   json={"code": encoded},
                   auth=auth,
                   timeout=40
