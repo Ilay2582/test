@@ -1,4 +1,4 @@
-name: Stage2-01-Source-Fingerprint
+name: Stage2-02-Identify-Source-Marker
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  fingerprint:
+  inspect:
     runs-on: ubuntu-latest
 
     env:
@@ -23,7 +23,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Fingerprint deployed Lambda source
+      - name: Identify source marker
         run: |
           python3 - <<'PY'
           import os
@@ -39,64 +39,29 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          tests = {
-              "source_readable": r'''
+          markers = [
+              "subprocess",
+              "shell=True",
+              "nslookup",
+              "lambda_handler",
+              "domain = event.get"
+          ]
+
+          for marker in markers:
+              code = f'''
           import subprocess
 
-          result = subprocess.run(
-              ["/bin/sh", "-c", "test -r /var/task/lambda_function.py"]
-          )
+          command = [
+              "/bin/sh",
+              "-c",
+              "grep -a -q {marker!r} /var/task/lambda_function.py"
+          ]
+
+          result = subprocess.run(command)
 
           raise SystemExit(7 if result.returncode == 0 else 9)
-          ''',
-
-              "source_size": r'''
-          import subprocess
-
-          result = subprocess.run(
-              ["/bin/sh", "-c", "wc -c < /var/task/lambda_function.py"],
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True
-          )
-
-          try:
-              size = int(result.stdout.strip())
-              raise SystemExit(20 + min(size, 220))
-          except SystemExit:
-              raise
-          except Exception:
-              raise SystemExit(19)
-          ''',
-
-              "historical_markers": r'''
-          import subprocess
-
-          command = (
-              "grep -a -E -o "
-              "'subprocess|shell=True|nslookup|lambda_handler|"
-              "domain[[:space:]]*=[[:space:]]*event' "
-              "/var/task/lambda_function.py | sort -u | wc -l"
-          )
-
-          result = subprocess.run(
-              ["/bin/sh", "-c", command],
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True
-          )
-
-          try:
-              count = int(result.stdout.strip())
-              raise SystemExit(30 + min(count, 20))
-          except SystemExit:
-              raise
-          except Exception:
-              raise SystemExit(19)
           '''
-          }
 
-          for name, code in tests.items():
               encoded = base64.b64encode(code.encode()).decode()
 
               response = requests.post(
@@ -106,7 +71,7 @@ jobs:
                   timeout=40
               )
 
-              print(f"TEST={name}")
+              print(f"MARKER={marker}")
               print(response.text)
               print("---")
           PY
