@@ -1,4 +1,4 @@
-name: Stage2-06-Domain-Injection-Test
+name: Stage2-07-Map-ApiGateway
 
 on:
   push:
@@ -7,68 +7,57 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  test:
+  map:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      API_URL: https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec
-
     steps:
-      - name: Install dependencies
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
+          aws-region: us-east-1
+
+      - name: Inspect REST API
         run: |
-          python3 -m pip install requests requests-aws4auth --quiet
+          aws apigateway get-rest-api \
+            --rest-api-id l8ssyaz69f \
+            --output json || true
 
-      - name: Test domain event path
+      - name: List REST API resources
         run: |
-          python3 - <<'PY'
-          import os
-          import requests
-          from requests_aws4auth import AWS4Auth
+          aws apigateway get-resources \
+            --rest-api-id l8ssyaz69f \
+            --output json || true
 
-          auth = AWS4Auth(
-              os.environ["AWS_ACCESS_KEY_ID"],
-              os.environ["AWS_SECRET_ACCESS_KEY"],
-              "us-east-1",
-              "execute-api",
-              session_token=os.environ["AWS_SESSION_TOKEN"]
-          )
+      - name: Inspect code_exec method
+        run: |
+          aws apigateway get-method \
+            --rest-api-id l8ssyaz69f \
+            --resource-id \
+              "$(aws apigateway get-resources \
+                --rest-api-id l8ssyaz69f \
+                --query 'items[?contains(path, `code_exec`)].id' \
+                --output text)" \
+            --http-method POST \
+            --output json || true
 
-          tests = [
-              {
-                  "name": "normal_domain",
-                  "body": {
-                      "domain": "example.com"
-                  }
-              },
-              {
-                  "name": "safe_injection_probe",
-                  "body": {
-                      "domain": "example.com; printf CTF_PROBE"
-                  }
-              },
-              {
-                  "name": "path_probe",
-                  "body": {
-                      "domain": "example.com; test -x /opt/nslookup"
-                  }
-              }
-          ]
+      - name: Inspect code_exec integration
+        run: |
+          RESOURCE_ID=$(aws apigateway get-resources \
+            --rest-api-id l8ssyaz69f \
+            --query 'items[?contains(path, `code_exec`)].id' \
+            --output text)
 
-          for test in tests:
-              response = requests.post(
-                  os.environ["API_URL"],
-                  json=test["body"],
-                  auth=auth,
-                  timeout=40
-              )
+          aws apigateway get-integration \
+            --rest-api-id l8ssyaz69f \
+            --resource-id "$RESOURCE_ID" \
+            --http-method POST \
+            --output json || true
 
-              print(f"TEST={test['name']}")
-              print(f"HTTP={response.status_code}")
-              print(response.text)
-              print("---")
-          PY
+      - name: Inspect HTTP APIs if applicable
+        run: |
+          aws apigatewayv2 get-apis \
+            --output json || true
