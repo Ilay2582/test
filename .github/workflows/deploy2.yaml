@@ -1,4 +1,4 @@
-name: Stage2-07-Map-ApiGateway
+name: Stage2-08-Inspect-Lambda-Policy
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  map:
+  inspect:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,44 +20,18 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Inspect REST API
+      - name: Inspect Lambda resource policy
         run: |
-          aws apigateway get-rest-api \
-            --rest-api-id l8ssyaz69f \
+          aws lambda get-policy \
+            --function-name nslookupv2 \
             --output json || true
 
-      - name: List REST API resources
+      - name: Inspect Lambda versions and aliases
         run: |
-          aws apigateway get-resources \
-            --rest-api-id l8ssyaz69f \
+          aws lambda list-versions-by-function \
+            --function-name nslookupv2 \
             --output json || true
 
-      - name: Inspect code_exec method
-        run: |
-          aws apigateway get-method \
-            --rest-api-id l8ssyaz69f \
-            --resource-id \
-              "$(aws apigateway get-resources \
-                --rest-api-id l8ssyaz69f \
-                --query 'items[?contains(path, `code_exec`)].id' \
-                --output text)" \
-            --http-method POST \
-            --output json || true
-
-      - name: Inspect code_exec integration
-        run: |
-          RESOURCE_ID=$(aws apigateway get-resources \
-            --rest-api-id l8ssyaz69f \
-            --query 'items[?contains(path, `code_exec`)].id' \
-            --output text)
-
-          aws apigateway get-integration \
-            --rest-api-id l8ssyaz69f \
-            --resource-id "$RESOURCE_ID" \
-            --http-method POST \
-            --output json || true
-
-      - name: Inspect HTTP APIs if applicable
-        run: |
-          aws apigatewayv2 get-apis \
+          aws lambda list-aliases \
+            --function-name nslookupv2 \
             --output json || true
