@@ -1,4 +1,4 @@
-name: Stage2-08-Inspect-Lambda-Policy
+name: Stage2-09-Probe-Nslookup-API
 
 on:
   push:
@@ -10,8 +10,12 @@ permissions:
   id-token: write
 
 jobs:
-  inspect:
+  probe:
     runs-on: ubuntu-latest
+
+    env:
+      API_ID: 3q931syi7b
+      AWS_REGION: us-east-1
 
     steps:
       - name: Configure AWS credentials
@@ -20,18 +24,56 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Inspect Lambda resource policy
+      - name: Install dependencies
         run: |
-          aws lambda get-policy \
-            --function-name nslookupv2 \
-            --output json || true
+          python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Inspect Lambda versions and aliases
+      - name: Probe vulnerable API routes
         run: |
-          aws lambda list-versions-by-function \
-            --function-name nslookupv2 \
-            --output json || true
+          python3 - <<'PY'
+          import os
+          import requests
+          from requests_aws4auth import AWS4Auth
 
-          aws lambda list-aliases \
-            --function-name nslookupv2 \
-            --output json || true
+          base = (
+              "https://"
+              + os.environ["API_ID"]
+              + ".execute-api.us-east-1.amazonaws.com"
+          )
+
+          auth = AWS4Auth(
+              os.environ["AWS_ACCESS_KEY_ID"],
+              os.environ["AWS_SECRET_ACCESS_KEY"],
+              "us-east-1",
+              "execute-api",
+              session_token=os.environ.get("AWS_SESSION_TOKEN")
+          )
+
+          paths = [
+              "/",
+              "/dev",
+              "/dev/",
+              "/dev/nslookup",
+              "/dev/lookup",
+              "/dev/resolve",
+              "/nslookup",
+              "/lookup",
+              "/resolve",
+              "/dev/code_exec"
+          ]
+
+          for path in paths:
+              url = base + path
+
+              response = requests.post(
+                  url,
+                  json={"domain": "example.com"},
+                  auth=auth,
+                  timeout=20
+              )
+
+              print(f"PATH={path}")
+              print(f"HTTP={response.status_code}")
+              print(response.text[:500])
+              print("---")
+          PY
