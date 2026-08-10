@@ -1,4 +1,4 @@
-name: Stage2-04-Map-VPC-And-Lambda
+name: Stage2-05-Download-Lambda
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  map:
+  inspect:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,34 +20,41 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Identify current account
+      - name: Identify Lambda
         run: |
           aws sts get-caller-identity
-
-      - name: List VPCs
-        run: |
-          aws ec2 describe-vpcs \
-            --query 'Vpcs[].{VpcId:VpcId,Cidr:CidrBlock,Tags:Tags}' \
+          aws lambda get-function-configuration \
+            --function-name nslookupv2 \
+            --query '{FunctionName:FunctionName,Role:Role,Runtime:Runtime,Handler:Handler,Layers:Layers,VpcConfig:VpcConfig}' \
             --output json
 
-      - name: List VPC endpoints
+      - name: Download deployed Lambda package
         run: |
-          aws ec2 describe-vpc-endpoints \
-            --query 'VpcEndpoints[].{Id:VpcEndpointId,Vpc:VpcId,Service:ServiceName,State:State,Type:VpcEndpointType}' \
-            --output json
+          URL=$(aws lambda get-function \
+            --function-name nslookupv2 \
+            --query 'Code.Location' \
+            --output text)
 
-      - name: List Lambda functions
-        run: |
-          aws lambda list-functions \
-            --query 'Functions[].{Name:FunctionName,Role:Role,Runtime:Runtime}' \
-            --output json
+          curl --fail --location "$URL" --output /tmp/nslookupv2.zip
 
-      - name: Inspect Lambda configurations
+          mkdir -p /tmp/nslookupv2
+          unzip -l /tmp/nslookupv2.zip
+          unzip -q /tmp/nslookupv2.zip -d /tmp/nslookupv2
+
+      - name: Inspect deployed source
         run: |
-          for function in $(aws lambda list-functions --query 'Functions[].FunctionName' --output text); do
-            echo "===== FUNCTION: $function ====="
-            aws lambda get-function-configuration \
-              --function-name "$function" \
-              --query '{Name:FunctionName,Role:Role,Vpc:VpcConfig,EnvironmentKeys:Environment.Variables}' \
-              --output json
-          done
+          find /tmp/nslookupv2 -maxdepth 3 -type f -print
+
+          echo "===== Python source files ====="
+          find /tmp/nslookupv2 -type f -name '*.py' -exec sh -c '
+            for file do
+              echo "===== $file ====="
+              sed -n "1,240p" "$file"
+            done
+          ' sh {} +
+
+      - name: Search deployed package
+        run: |
+          rg -n -i \
+            "subprocess|shell=True|nslookup|s3|bucket|user.?agent|sourcevpc|sourcevpce|flag|secret|exec|base64|lambda_handler" \
+            /tmp/nslookupv2 || true
