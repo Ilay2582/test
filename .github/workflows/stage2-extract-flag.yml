@@ -1,8 +1,11 @@
 name: Stage2-Calibration
 
 on:
+  push:
+    branches:
+      - corgi
   workflow_dispatch:
-
+  
 permissions:
   id-token: write
   contents: read
