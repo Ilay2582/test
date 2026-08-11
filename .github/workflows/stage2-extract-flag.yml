@@ -1,4 +1,4 @@
-name: Stage2-Test-Signed-S3
+name: Stage2-Test-Signed-S3-Clear
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Test Lambda role S3 access
+      - name: Test signed S3 access
         shell: bash
         run: |
           set +e
@@ -61,12 +61,12 @@ jobs:
 
               print("SIGNED_S3_SUCCESS")
               print("BYTES=" + str(len(data)))
-              time.sleep(4)
+
+              time.sleep(8)
 
           except Exception as error:
               print("SIGNED_S3_FAILURE")
               print(repr(error))
-              time.sleep(1)
           '''
 
           encoded = base64.b64encode(script.encode()).decode()
@@ -95,7 +95,7 @@ jobs:
               API,
               json={"domain": command},
               auth=auth,
-              timeout=20
+              timeout=25
           )
 
           elapsed = time.monotonic() - started
