@@ -125,3 +125,8 @@ jobs:
 
               except Exception as exc:
                   elapsed = time.monotonic() - started
+                  print("UA=" + ua)
+                  print("ERROR=" + repr(exc))
+                  print("ELAPSED=%.2f" % elapsed)
+                  print("---")
+          PY
